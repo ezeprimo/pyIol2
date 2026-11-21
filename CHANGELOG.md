@@ -16,8 +16,14 @@ project adheres to [Semantic Versioning](https://semver.org/).
   sin cerrar la conexion, con los tres canales siempre presentes en el frame.
 - `scripts/smoke_test.py`: prueba de humo de solo lectura contra la API real,
   con verificacion opcional del handshake del WebSocket.
+- `scripts/order_roundtrip.py`: crea, verifica y cancela ordenes limit con 5% de
+  desvio, cancelando en `finally` aunque algo falle. Requiere `--yes`.
 
 ### Fixed
+
+- `estimate_order()` y `create_order()` ahora mandan siempre `settlement_term`
+  (por defecto `T1`): la API responde `400` si falta, aunque el contrato lo
+  marque opcional. Probado contra produccion.
 
 - Los errores de transporte (`httpx.HTTPError`) levantan `IOLConnectionError`,
   que se exportaba pero nunca se usaba.

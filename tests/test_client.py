@@ -235,6 +235,7 @@ def test_create_order_manda_idempotencia_y_vencimiento_por_defecto(client, stub)
         "order_type": "market",
         "due_date": date.today().isoformat(),
         "quantity": 10,
+        "settlement_term": "T1",
     }
     key = request["headers"]["x-idempotency-key"]
     assert uuid.UUID(key).version == 4
@@ -508,3 +509,20 @@ def test_test_authentication_devuelve_false_si_rechazan_la_sesion(stub, make_cli
     client = make_client()
 
     assert client.test_authentication() is False
+
+
+def test_create_order_manda_settlement_term_por_defecto(client, stub):
+    # La API responde 400 sin settlement_term, aunque el contrato lo diga opcional.
+    stub.set("POST", "/broker/orders", ORDER_RESULT_PAYLOAD, status=201)
+
+    client.create_order("GGAL", "buy", quantity=1)
+
+    assert stub.last("POST", "/broker/orders")["body"]["settlement_term"] == "T1"
+
+
+def test_create_order_respeta_settlement_term_explicito(client, stub):
+    stub.set("POST", "/broker/orders", ORDER_RESULT_PAYLOAD, status=201)
+
+    client.create_order("GGAL", "buy", quantity=1, settlement_term="T0")
+
+    assert stub.last("POST", "/broker/orders")["body"]["settlement_term"] == "T0"

@@ -931,7 +931,7 @@ class IOLClient:
             market_id: Mercado segun `Markets`
             order_type: `limit` o `market`
             limit_price: Precio limite, obligatorio en ordenes limit
-            settlement_term: Plazo de liquidacion
+            settlement_term: Plazo de liquidacion; por defecto `T1`
             due_date: Vencimiento de la orden, `YYYY-MM-DD`
 
         Returns:
@@ -1006,7 +1006,7 @@ class IOLClient:
             market_id: Mercado segun `Markets`
             order_type: `limit` o `market`
             limit_price: Precio limite
-            settlement_term: Plazo de liquidacion
+            settlement_term: Plazo de liquidacion; por defecto `T1`
             due_date: Vencimiento de la orden, `YYYY-MM-DD`; por defecto hoy
             idempotency_key: UUID v4 para evitar duplicados; se genera si no se pasa
 
@@ -1114,6 +1114,9 @@ class IOLClient:
             "side": side,
             "order_type": order_type,
             "due_date": due_date or date.today().isoformat(),
+            # La API responde 400 si falta `settlement_term`, aunque el contrato
+            # lo marque como opcional: siempre mandamos uno.
+            "settlement_term": settlement_term or DEFAULT_SETTLEMENT_TERM,
         }
         if quantity is not None:
             body["quantity"] = quantity
@@ -1121,8 +1124,6 @@ class IOLClient:
             body["notional"] = notional
         if limit_price is not None:
             body["limit_price"] = limit_price
-        if settlement_term is not None:
-            body["settlement_term"] = settlement_term
         return body
 
     @staticmethod

@@ -166,3 +166,28 @@ Deviations found against the published contract, all now documented in
 
 L19 (open): retest `get_repo_quotes()` and the write paths (`/broker/orders`
 estimate, FCI validate) during trading hours before releasing.
+
+L20 (evidence, real writes): ran `scripts/order_roundtrip.py --yes` four times
+against production with the market closed. Buy path validated end to end on
+COME: `create_order` accepted (order ids 196806748, 196806749, 196806752),
+`get_trading_operations` showed each order with `status: "pending"` within
+seconds, and `cancel_order` returned `cancelled: True` / `status: "cancelled"`.
+No order was left alive; the script cancels in `finally` and exits non-zero if
+anything survives.
+
+Findings that changed the code: the order body must always carry
+`settlement_term` (the API answers 400 without it, although the contract marks
+it optional), so `_order_body` now defaults to `T1` and
+`DEFAULT_SETTLEMENT_TERM` moved from `T0` to `T1` to match how the API actually
+prices assets.
+
+Findings that remain open: sell orders were rejected with an opaque
+`422 ORDER_REJECTED` for a held CEDEAR (JNJ), a held local instrument (PAMP) and
+a non-held symbol (KO), and `details` was empty in every case. Market orders are
+rejected outside trading hours, and a PAMP buy at 4316 with 3064 ARS available
+was rejected with the same code, so available balance has to be checked before
+sending a real order. The accepted-sell path is still unverified (L21).
+
+L21 (open): retest the sell path during trading hours and find out whether the
+rejection is a pre-condition of the closed market or something about the
+account's sell permissions.

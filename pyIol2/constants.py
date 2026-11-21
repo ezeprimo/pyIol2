@@ -101,5 +101,7 @@ STREAM_SIDE_OFFER = "OFFER"
 
 # Valores por defecto
 DEFAULT_MARKET = Markets.BCBA
-DEFAULT_SETTLEMENT_TERM = SettlementTerms.T0
+# La API no aplica default en el cuerpo de las ordenes: si falta `settlement_term`
+# responde 400. T1 es el plazo con el que cotizan acciones, CEDEARs y bonos.
+DEFAULT_SETTLEMENT_TERM = SettlementTerms.T1
 DEFAULT_COUNTRY = Countries.ARGENTINA

@@ -220,6 +220,33 @@ async for message in stream.subscribe(["GGAL", "YPFD"], order_book=True):
     ...
 ```
 
+## Ordenes: Lo Que Acepta el Broker
+
+Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
+
+- **`settlement_term` es obligatorio de hecho.** El contrato lo marca opcional,
+  pero sin el la API responde `400`. La libreria manda `T1` por defecto;
+  `estimate_order` y `create_order` aceptan otro valor.
+- **El limite tiene banda de precio.** Un precio muy lejos del mercado se
+  rechaza con `422` y `code: "ORDER_REJECTED"`; en las pruebas, `0.25x` del
+  ultimo fue rechazado y `0.95x` fue aceptado. No hay documentacion del ancho de
+  la banda: no diseñes la operatoria asumiendo un valor.
+- **`ORDER_REJECTED` no explica nada**: `details` viene vacio y el mensaje es
+  siempre "The order was not accepted". Lo unico util para reclamar es el
+  `trace_id`, que la excepcion conserva.
+- **Las ordenes `market` se rechazan fuera de horario.** Usar `limit`.
+- **No alcanza con tener saldo**: una compra de PAMP a 4316 con 3064 de saldo
+  disponible fue rechazada con el mismo codigo opaco. Antes de mandar una orden
+  real, comparar el importe estimado con `get_account_balances()`.
+- **Las ventas no las pude validar.** Intentadas sobre un CEDEAR con tenencia
+  (JNJ), sobre un instrumento local con tenencia (PAMP) y sobre un simbolo sin
+  tenencia (KO): las tres devolvieron `422 ORDER_REJECTED`. No es falta de
+  tenencia; falta averiguar la regla (candidato: precondicion de venta fuera de
+  horario). Reintentar en horario de mercado antes de confiar en el camino.
+- **El camino de compra si quedo validado de punta a punta**: crear, encontrar
+  la orden en `get_trading_operations()` con `status: "pending"` en segundos, y
+  `cancel_order()` devolviendo `cancelled: True` con `status: "cancelled"`.
+
 ## Nunca Reintentar una Escritura Incierta
 
 Estos metodos tienen efectos reales sobre la cuenta:
