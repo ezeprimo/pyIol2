@@ -251,3 +251,25 @@ price and refuses to run when the cushion is not real on the buy side;
 seconds behind order creation. Full round-trip verified against production:
 buy COME (196807038) and sell KO (196807039) both `pending`, both
 `cancelled=True`, no live orders, exit 0.
+
+L26 (fix, correction of review-19cff5531a4b60a3): the reviewers caught two real
+defects and one broken promise of mine.
+
+- R3-001 (BLOCKER, deterministic): the `_reconcile` call site still passed seven
+  positional arguments to an eight-parameter function, so any ambiguous
+  `create_order` raised `TypeError` instead of reconciling. Same class of
+  failure as L23: a textual replacement that did not apply. Edits now assert
+  that the old text exists before replacing it.
+- R1-002 / R3-002 / R4-SELL-REFERENCE-EXECUTION: selling at the reference price
+  is marketable, so my "no execution risk" guarantee no longer held, and
+  verification ran before cancellation, keeping the order live for up to ten
+  seconds. The sell leg is passive again by default (5% above reference, which
+  the broker may reject on band) and the marketable variant is opt-in behind
+  `--allow-marketable-sell`.
+- Verification now runs after cancellation, so no order is live while the
+  operations feed is polled, and it fails the run when an order is missing or
+  left open. `_reconcile` tolerates market orders without a price.
+
+Re-verified against production with the opt-in flag: buy COME (196807075) and
+sell KO (196807076) created, cancelled, and both verified as `cancelled`
+afterwards; exit 0 and no live orders.

@@ -4,8 +4,11 @@ Round-trip de ordenes contra la API real de IOL: crear, verificar y cancelar.
 
 Pensado para validar los caminos de escritura sin riesgo de ejecucion:
 
-- Solo ordenes `limit`, con un colchon del 5% sobre el precio de referencia y
-  la garantia de que el limite calculado nunca coincide con ese precio.
+- Por defecto las dos patas son pasivas: la compra 5% abajo y la venta 5%
+  arriba del precio de referencia, o sea sin riesgo de ejecucion. El broker
+  puede rechazar la venta por banda de precio; con `--allow-marketable-sell` se
+  manda la venta al precio de referencia, que la banda SI acepta pero que puede
+  ejecutarse: es una prueba consciente, no la default.
 - Cantidad minima (1 nominal) y vencimiento hoy, para que no sobreviva la rueda.
 - Toda orden creada se cancela en un bloque `finally`. El id se registra antes
   de cualquier log, y si el alta queda ambigua se reconcilia contra las
@@ -41,11 +44,13 @@ MARKET = Markets.BCBA
 QUANTITY = 1.0
 # El broker rechaza limites fuera de una banda de precio (422 ORDER_REJECTED) y
 # la banda no es simetrica: medido contra produccion con KO (CEDEAR, ultimo
-# 34820), la compra se acepto 5% abajo y la venta solo al precio de referencia
-# (0.95x, 0.99x y 1.05x fueron rechazadas; 1.00x y la orden market, aceptadas).
-# Por eso la venta va al precio de referencia y se cancela de inmediato.
+# 34820), la compra se acepto 5% abajo; la venta solo se acepto al precio de
+# referencia (1.00x), mientras 0.95x, 0.99x y 1.05x fueron rechazadas.
+# Venta 5% arriba = pasiva pero puede caer fuera de banda; 1.00x = aceptada pero
+# ejecutable, por eso la segunda es opt-in.
 BUY_FACTOR = 0.95
-SELL_FACTOR = 1.00
+SELL_FACTOR = 1.05
+MARKETABLE_SELL_FACTOR = 1.00
 TICK = 0.01
 # Estados en los que la orden ya no puede ejecutarse.
 CLOSED_STATUSES = ("cancelled", "canceled", "finished", "rejected", "expired")
@@ -250,6 +255,7 @@ def _reconcile(
         and order["side"] == side
         and order["order_id"] not in baseline
         and (order.get("term") in (None, "", term))
+        and order.get("price") is not None
         and abs(float(order["price"]) - float(price)) < TICK / 2
         and abs(float(order["qty"]) - float(quantity)) < TICK / 2
     ]
@@ -288,6 +294,11 @@ def main() -> int:
     )
     parser.add_argument("--yes", action="store_true", help="ejecutar las ordenes de verdad")
     parser.add_argument(
+        "--allow-marketable-sell",
+        action="store_true",
+        help="vender al precio de referencia (la banda lo acepta pero la orden puede ejecutarse)",
+    )
+    parser.add_argument(
         "--sell-held",
         action="store_true",
         help=f"vender un activo con tenencia en lugar de {SELL_SYMBOL}",
@@ -303,6 +314,7 @@ def main() -> int:
 
     day = date.today().isoformat()
     alive: list[str] = []
+    created_ids: list[str] = []
     problems: list[str] = []
 
     with IOLClient(username, password) as client:
@@ -313,11 +325,16 @@ def main() -> int:
         buy_reference = _price(client, BUY_SYMBOL)
         sell_reference = _price(client, sell_symbol, sell_market)
         buy_limit = _limit(buy_reference, BUY_FACTOR, "buy")
-        sell_limit = _limit(sell_reference, SELL_FACTOR, "sell")
+        sell_factor = MARKETABLE_SELL_FACTOR if args.allow_marketable_sell else SELL_FACTOR
+        sell_limit = _limit(sell_reference, sell_factor, "sell")
 
         # Sin colchon real no se manda nada: es la unica garantia de no ejecucion.
+        sell_without_cushion = sell_limit <= sell_reference
         if buy_limit >= buy_reference or sell_limit < sell_reference:
             _say("FALLA: los limites calculados no tienen colchon; no se manda nada")
+            return 2
+        if sell_without_cushion and not args.allow_marketable_sell:
+            _say("FALLA: la venta quedaria ejecutable; usar --allow-marketable-sell a proposito")
             return 2
 
         _say("Plan (limite con 5% de desvio, cancelacion inmediata):")
@@ -382,7 +399,9 @@ def main() -> int:
                     # El alta es incierta: puede haberse aceptado y fallado la
                     # respuesta. Se reconcilia en lugar de reintentar.
                     try:
-                        recovered = _reconcile(client, day, symbol, term, limit, QUANTITY, baseline)
+                        recovered = _reconcile(
+                            client, day, symbol, side, term, limit, QUANTITY, baseline
+                        )
                     except IOLAPIError as reconcile_exc:
                         problems.append(
                             f"alta ambigua de {symbol} sin reconciliar: {_error(reconcile_exc)}"
@@ -392,12 +411,14 @@ def main() -> int:
                     for order_id in recovered:
                         _describe("[RECONCILIADA]", f"{order_id} aparecio viva")
                         alive.append(order_id)
+                        created_ids.append(order_id)
                     continue
 
                 # El id se registra antes de cualquier log: si imprimir falla, la
                 # limpieza igual lo conoce.
                 if result.order_id:
                     alive.append(str(result.order_id))
+                    created_ids.append(str(result.order_id))
                 _describe(
                     label,
                     f"order_id={result.order_id} ok={result.successful_purchase} "
@@ -406,22 +427,28 @@ def main() -> int:
                 if not result.order_id:
                     problems.append(f"{symbol} {side}: la API no devolvio order_id")
 
-            _say("")
-            _say("Estado en la cuenta:")
-            for order_id in list(alive):
-                found = _find_order(client, order_id, day)
-                if found is None:
-                    problems.append(f"{order_id} no aparece en las operaciones del dia")
-                    _describe("[VERIFY]", f"{order_id} no aparece")
-                else:
-                    _describe("[VERIFY]", found)
         finally:
+            # Cancelar antes de verificar: el feed de operaciones tarda segundos
+            # y una orden viva mientras se espera es una orden ejecutable.
             _say("")
             _say("Cancelando todo lo que quedo vivo:")
             for order_id in list(alive):
                 _cancel(client, order_id, alive)
             if alive:
                 problems.append(f"quedaron sin cancelar: {alive}")
+
+        _say("")
+        _say("Verificacion (despues de cancelar):")
+        for order_id in created_ids:
+            found = _find_order(client, order_id, day)
+            if found is None:
+                problems.append(f"{order_id} no aparece en las operaciones del dia")
+                _describe("[VERIFY]", f"{order_id} no aparece")
+                continue
+            status = str(found["status"]).lower()
+            if status not in CLOSED_STATUSES:
+                problems.append(f"{order_id} quedo en estado {found['status']}")
+            _describe("[VERIFY]", found)
 
         _say("")
         if alive:
