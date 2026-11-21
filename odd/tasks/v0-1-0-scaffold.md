@@ -284,3 +284,12 @@ after an ambiguous create. The round-trip script therefore also matches on
 `order_date` within a bounded window around the request, on top of the pre-run
 baseline and the attribute match. Verified the call/signature arity
 programmatically (9 = 9) instead of trusting the edit.
+
+L29 (follow-ups closed from review-adee67cec88d0ab2, all advisory): the three
+findings pointed at the same hole in `_within_window`. A timezone-aware
+`order_date` produced an aware datetime and the subtraction against a naive
+`datetime.now()` raised `TypeError` outside the handler, aborting the
+reconciliation of an ambiguous create. Offsets are now normalised to local naive
+time and every unparseable value returns False. The helper also got its own test
+module (`tests/test_order_roundtrip_script.py`), loading the script by path so
+the window boundary, the offset case and the unparseable inputs are covered.

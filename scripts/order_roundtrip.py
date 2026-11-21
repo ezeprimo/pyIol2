@@ -281,9 +281,14 @@ def _within_window(order_date: str, sent_at: datetime) -> bool:
         True si cae dentro de la ventana de tolerancia
     """
     try:
-        created = datetime.fromisoformat(order_date)
+        created = datetime.fromisoformat(str(order_date))
     except (TypeError, ValueError):
         return False
+    # La API manda la fecha sin offset (hora local), pero si alguna vez viniera
+    # con offset hay que normalizarla antes de restar: aware menos naive explota
+    # fuera del try y dejaria el alta ambigua sin reconciliar.
+    if created.tzinfo is not None:
+        created = created.astimezone().replace(tzinfo=None)
     return abs((created - sent_at).total_seconds()) <= SENT_WINDOW_SECONDS
 
 
