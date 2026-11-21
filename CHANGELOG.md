@@ -16,8 +16,9 @@ project adheres to [Semantic Versioning](https://semver.org/).
   sin cerrar la conexion, con los tres canales siempre presentes en el frame.
 - `scripts/smoke_test.py`: prueba de humo de solo lectura contra la API real,
   con verificacion opcional del handshake del WebSocket.
-- `scripts/order_roundtrip.py`: crea, verifica y cancela ordenes limit con 5% de
-  desvio, cancelando en `finally` aunque algo falle. Requiere `--yes`.
+- `scripts/order_roundtrip.py`: crea, verifica y cancela una compra y una venta,
+  cancelando en `finally` aunque algo falle, con baseline de ordenes previas y
+  reconciliacion de altas ambiguas. Requiere `--yes`.
 
 ### Fixed
 

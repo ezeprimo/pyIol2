@@ -236,3 +236,18 @@ L24 (terminal): lineage `review-2d1cdc67c3790ae8` ended `escalated` /
 correction was consumed and failed, so no further correction or continuation is
 offered for that candidate. A fresh review of the new commit would be a new
 transaction and needs a human decision, as does delivery.
+
+L25 (evidence, sell path resolved): the earlier sell rejections were a price
+problem, not holdings or tickers. KO is held (24 available) and is a valid BCBA
+CEDEAR; PAMP (31) and JNJ (5) were also available. Probed the band with KO
+(last 34,820) and cancelling each acceptance immediately: `0.95x`, `0.99x` and
+`1.05x` were rejected with `422 ORDER_REJECTED`; `1.00x` and the `market` sell
+were accepted. So the accept band is not symmetric: buys take 0.95x, sells only
+the reference price.
+
+Corrections that followed: `scripts/order_roundtrip.py` sells at the reference
+price and refuses to run when the cushion is not real on the buy side;
+`_find_order` retries with a bounded wait because the operations feed lags a few
+seconds behind order creation. Full round-trip verified against production:
+buy COME (196807038) and sell KO (196807039) both `pending`, both
+`cancelled=True`, no live orders, exit 0.

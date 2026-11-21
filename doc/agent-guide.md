@@ -240,11 +240,18 @@ Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
 - **No alcanza con tener saldo**: una compra de PAMP a 4316 con 3064 de saldo
   disponible fue rechazada con el mismo codigo opaco. Antes de mandar una orden
   real, comparar el importe estimado con `get_account_balances()`.
-- **Las ventas no las pude validar.** Intentadas sobre un CEDEAR con tenencia
-  (JNJ), sobre un instrumento local con tenencia (PAMP) y sobre un simbolo sin
-  tenencia (KO): las tres devolvieron `422 ORDER_REJECTED`. No es falta de
-  tenencia; falta averiguar la regla (candidato: precondicion de venta fuera de
-  horario). Reintentar en horario de mercado antes de confiar en el camino.
+- **La banda de precio no es simetrica.** Medido con KO (CEDEAR, ultimo
+  34.820): la venta se acepto **solo al precio de referencia** (`1.00x`), y
+  `0.95x`, `0.99x` y `1.05x` fueron rechazadas. La compra, en cambio, se acepto
+  `0.95x` abajo. Si tu limite cae fuera de esa banda, no hay forma de saberlo
+  antes: el rechazo es el mismo `ORDER_REJECTED` sin detalle.
+- **Las ventas si funcionan.** El problema anterior era el precio, no la
+  tenencia: con `1.00x` del ultimo, una venta de KO (24 disponibles) y de PAMP
+  se aceptan, quedan `pending` y se cancelan igual que las compras. La orden
+  `market` de venta tambien se acepto.
+- **El feed de operaciones no es inmediato.** Una orden recien creada tarda unos
+  segundos en aparecer en `get_trading_operations()`; verificar con una espera
+  acotada (5 intentos cada 2s) y no con una sola consulta.
 - **El camino de compra si quedo validado de punta a punta**: crear, encontrar
   la orden en `get_trading_operations()` con `status: "pending"` en segundos, y
   `cancel_order()` devolviendo `cancelled: True` con `status: "cancelled"`.

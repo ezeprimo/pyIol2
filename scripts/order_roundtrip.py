@@ -23,6 +23,7 @@ import json
 import math
 import os
 import sys
+import time
 from datetime import date
 from typing import Any
 
@@ -38,11 +39,13 @@ SELL_SYMBOL = "KO"
 
 MARKET = Markets.BCBA
 QUANTITY = 1.0
-# El broker rechaza limites fuera de la banda de precio (422 ORDER_REJECTED),
-# asi que no se puede usar un precio "imposible". Un 5% de desvio alcanza para
-# probar el camino sin quedar expuesto, y se cancela de inmediato.
+# El broker rechaza limites fuera de una banda de precio (422 ORDER_REJECTED) y
+# la banda no es simetrica: medido contra produccion con KO (CEDEAR, ultimo
+# 34820), la compra se acepto 5% abajo y la venta solo al precio de referencia
+# (0.95x, 0.99x y 1.05x fueron rechazadas; 1.00x y la orden market, aceptadas).
+# Por eso la venta va al precio de referencia y se cancela de inmediato.
 BUY_FACTOR = 0.95
-SELL_FACTOR = 1.05
+SELL_FACTOR = 1.00
 TICK = 0.01
 # Estados en los que la orden ya no puede ejecutarse.
 CLOSED_STATUSES = ("cancelled", "canceled", "finished", "rejected", "expired")
@@ -110,7 +113,8 @@ def _limit(last: float, factor: float, side: str) -> float:
         side: `buy` o `sell`
 
     Returns:
-        Precio limite, garantizado distinto de `last` y del lado correcto
+        Precio limite: la compra queda por debajo y la venta nunca por debajo
+        del precio de referencia, que es la unica banda que el broker acepto
     """
     if side == "buy":
         limit = math.floor(last * factor / TICK) * TICK
@@ -121,8 +125,8 @@ def _limit(last: float, factor: float, side: str) -> float:
         return round(limit, 2)
 
     limit = math.ceil(last * factor / TICK) * TICK
-    if limit <= last:
-        limit = math.ceil((last + TICK) / TICK) * TICK
+    if limit < last:
+        limit = math.ceil(last / TICK) * TICK
     return round(limit, 2)
 
 
@@ -171,8 +175,31 @@ def _open_orders(client: IOLClient, day: str) -> list[dict[str, Any]]:
     ]
 
 
-def _find_order(client: IOLClient, order_id: str, day: str) -> dict[str, Any] | None:
-    """Busca una orden del dia por id en las operaciones de trading."""
+def _find_order(
+    client: IOLClient,
+    order_id: str,
+    day: str,
+    attempts: int = 5,
+    delay: float = 2.0,
+) -> dict[str, Any] | None:
+    """
+    Busca una orden del dia por id en las operaciones de trading.
+
+    El feed de operaciones no es inmediato: una orden recien creada puede
+    tardar unos segundos en aparecer, asi que se reintenta con una espera
+    acotada antes de darla por ausente.
+    """
+    for attempt in range(1, attempts + 1):
+        found = _find_order_once(client, order_id, day)
+        if found is not None:
+            return found
+        if attempt < attempts:
+            time.sleep(delay)
+    return None
+
+
+def _find_order_once(client: IOLClient, order_id: str, day: str) -> dict[str, Any] | None:
+    """Una sola consulta de la orden del dia."""
     try:
         operations = client.get_trading_operations(day, day)
     except IOLAPIError as exc:
@@ -289,7 +316,7 @@ def main() -> int:
         sell_limit = _limit(sell_reference, SELL_FACTOR, "sell")
 
         # Sin colchon real no se manda nada: es la unica garantia de no ejecucion.
-        if buy_limit >= buy_reference or sell_limit <= sell_reference:
+        if buy_limit >= buy_reference or sell_limit < sell_reference:
             _say("FALLA: los limites calculados no tienen colchon; no se manda nada")
             return 2
 
