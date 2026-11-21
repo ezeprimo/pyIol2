@@ -20,6 +20,12 @@ project adheres to [Semantic Versioning](https://semver.org/).
   cancelando en `finally` aunque algo falle, con baseline de ordenes previas y
   reconciliacion de altas ambiguas. Requiere `--yes`.
 
+### Changed
+
+- `estimate_order()` y `create_order()` rechazan `settlement_term=""` con
+  `IOLValidationError`: la cadena vacia no es un default, `None` lo es. Antes se
+  mandaba y la API respondia 400 sin detalle.
+
 ### Fixed
 
 - `estimate_order()` y `create_order()` ahora mandan siempre `settlement_term`

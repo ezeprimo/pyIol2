@@ -27,7 +27,7 @@ import math
 import os
 import sys
 import time
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from dotenv import load_dotenv
@@ -52,6 +52,8 @@ BUY_FACTOR = 0.95
 SELL_FACTOR = 1.05
 MARKETABLE_SELL_FACTOR = 1.00
 TICK = 0.01
+# Tolerancia entre la hora local del request y la `order_date` del feed.
+SENT_WINDOW_SECONDS = 120.0
 # Estados en los que la orden ya no puede ejecutarse.
 CLOSED_STATUSES = ("cancelled", "canceled", "finished", "rejected", "expired")
 
@@ -173,6 +175,7 @@ def _open_orders(client: IOLClient, day: str) -> list[dict[str, Any]]:
             "qty": operation.order.qty,
             "price": operation.order.price,
             "term": operation.term,
+            "order_date": str(operation.order_date),
             "side": "sell" if "venta" in str(operation.type).lower() else "buy",
         }
         for operation in operations
@@ -234,6 +237,7 @@ def _reconcile(
     price: float,
     quantity: float,
     baseline: set[str],
+    sent_at: datetime,
 ) -> list[str]:
     """
     Busca ordenes que coincidan con un alta que quedo ambigua.
@@ -242,8 +246,10 @@ def _reconcile(
     el id. Se reconcilia contra las operaciones del dia en lugar de reintentar:
     el alta es incierta, no fallida.
 
-    Solo se consideran ordenes que aparecieron despues del `baseline` tomado
-    antes de mandar nada: una orden previa del usuario jamas se toca.
+    La API no devuelve la `X-Idempotency-Key` en el feed de operaciones, asi que
+    no hay id de correlacion. Se usan tres discriminadores juntos: no estar en el
+    `baseline`, coincidir en simbolo/lado/plazo/precio/cantidad, y tener
+    `order_date` dentro de la ventana en que se mando el request.
 
     Returns:
         Ids de ordenes que aparecieron y no estaban antes de empezar
@@ -258,8 +264,27 @@ def _reconcile(
         and order.get("price") is not None
         and abs(float(order["price"]) - float(price)) < TICK / 2
         and abs(float(order["qty"]) - float(quantity)) < TICK / 2
+        and _within_window(order["order_date"], sent_at)
     ]
     return matches
+
+
+def _within_window(order_date: str, sent_at: datetime) -> bool:
+    """
+    Indica si la orden se creo alrededor del momento en que mandamos el request.
+
+    Args:
+        order_date: Fecha de la orden tal como la informa la API
+        sent_at: Momento en que se mando el alta
+
+    Returns:
+        True si cae dentro de la ventana de tolerancia
+    """
+    try:
+        created = datetime.fromisoformat(order_date)
+    except (TypeError, ValueError):
+        return False
+    return abs((created - sent_at).total_seconds()) <= SENT_WINDOW_SECONDS
 
 
 def _cancel(client: IOLClient, order_id: str, alive: list[str]) -> bool:
@@ -384,6 +409,7 @@ def main() -> int:
                 (sell_symbol, "sell", sell_market, sell_limit),
             ):
                 label = "[BUY]" if side == "buy" else "[SELL]"
+                sent_at = datetime.now()
                 try:
                     result = client.create_order(
                         symbol,
@@ -400,7 +426,7 @@ def main() -> int:
                     # respuesta. Se reconcilia en lugar de reintentar.
                     try:
                         recovered = _reconcile(
-                            client, day, symbol, side, term, limit, QUANTITY, baseline
+                            client, day, symbol, side, term, limit, QUANTITY, baseline, sent_at
                         )
                     except IOLAPIError as reconcile_exc:
                         problems.append(

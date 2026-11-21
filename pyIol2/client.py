@@ -1108,6 +1108,12 @@ class IOLClient:
             raise IOLValidationError("hay que indicar quantity o notional, pero no ambos")
         if order_type == "limit" and not limit_price:
             raise IOLValidationError("limit_price es obligatorio en ordenes 'limit'")
+        if settlement_term == "":
+            # La API rechaza un term vacio con 400 sin detalle; None es "usar el
+            # default", la cadena vacia es un valor invalido.
+            raise IOLValidationError(
+                "settlement_term vacio: usar None para el default, o 'T0'/'T1'"
+            )
 
         body: dict[str, Any] = {
             "symbol": symbol,

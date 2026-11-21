@@ -262,8 +262,10 @@ Estima comisiones y cargos de una orden. No tiene efectos.
 - `limit_price` (`float | None`) — obligatorio en ordenes `limit`.
 - `settlement_term` (`str | None`) — plazo de liquidacion. Si es `None` se
   manda `DEFAULT_ORDER_SETTLEMENT_TERM` (`T1`): la API responde 400 si el
-  cuerpo no lo incluye, aunque el contrato lo marque opcional. El default de
-  market data y streaming sigue siendo `DEFAULT_SETTLEMENT_TERM` (`T0`).
+  cuerpo no lo incluye, aunque el contrato lo marque opcional. Una cadena vacia
+  es un error de validacion local (`IOLValidationError`), no un default. El
+  default de market data y streaming sigue siendo `DEFAULT_SETTLEMENT_TERM`
+  (`T0`).
 - `due_date` (`str | None`) — `YYYY-MM-DD`; default hoy.
 - **Retorna** `OrderEstimate` (`amount`, `commission`, `regulatory_fees`).
 - **Raw** `estimate_order_raw(...)` → `dict[str, Any]`.

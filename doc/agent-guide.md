@@ -249,6 +249,16 @@ Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
   tenencia: con `1.00x` del ultimo, una venta de KO (24 disponibles) y de PAMP
   se aceptan, quedan `pending` y se cancelan igual que las compras. La orden
   `market` de venta tambien se acepto.
+- **`settlement_term=""` es un error local.** Un term vacio no significa "usar
+  el default": `None` es el default, y la cadena vacia levanta
+  `IOLValidationError` antes de salir a la red.
+- **La API no correlaciona requests con ordenes.** El feed de operaciones
+  devuelve 13 campos (`order_id`, `ticket_id`, `order_date`, `type`, `status`,
+  `symbol`, `description`, `asset_type`, `term`, `currency`, `order`, `executed`,
+  `execution_date`) y ninguno es la `X-Idempotency-Key` que mandamos. Si el alta
+  queda ambigua (el broker la acepta y la respuesta se pierde), la unica forma
+  de reconocerla es por atributos mas su `order_date` dentro de la ventana en que
+  se mando el request.
 - **El feed de operaciones no es inmediato.** Una orden recien creada tarda unos
   segundos en aparecer en `get_trading_operations()`; verificar con una espera
   acotada (5 intentos cada 2s) y no con una sola consulta.

@@ -273,3 +273,14 @@ defects and one broken promise of mine.
 Re-verified against production with the opt-in flag: buy COME (196807075) and
 sell KO (196807076) created, cancelled, and both verified as `cancelled`
 afterwards; exit 0 and no live orders.
+
+L27 (decision, from the maintainer's follow-ups): `settlement_term=""` is now an
+explicit `IOLValidationError`; `None` remains the documented way to ask for the
+order default. Covered by two tests (order and estimate).
+
+L28 (evidence): the operations feed has 13 fields and none of them echoes the
+`X-Idempotency-Key` we send, so a request cannot be correlated with an order
+after an ambiguous create. The round-trip script therefore also matches on
+`order_date` within a bounded window around the request, on top of the pre-run
+baseline and the attribute match. Verified the call/signature arity
+programmatically (9 = 9) instead of trusting the edit.
