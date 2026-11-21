@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff linter
+        run: uv run ruff check pyIol2/ tests/
+
+      - name: Run ruff formatter check
+        run: uv run ruff format --check pyIol2/ tests/
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+        env:
+          # Fija el intérprete de la matriz: `uv sync` crea el .venv con él y
+          # `uv run` reutiliza ese mismo entorno.
+          UV_PYTHON: ${{ matrix.python-version }}
+
+      - name: Run tests with coverage
+        run: uv run pytest tests/ -q --cov=pyIol2 --cov-report=term-missing
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
+
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify wheel in a throwaway environment
+        run: |
+          uv venv "$RUNNER_TEMP/package-check"
+          VIRTUAL_ENV="$RUNNER_TEMP/package-check" uv pip install dist/*.whl
+          "$RUNNER_TEMP/package-check/bin/python" - <<'PY'
+          import re
+          from pathlib import Path
+
+          import pyIol2
+          from pyIol2 import IOLClient, IOLStreamClient, Markets, SettlementTerms
+
+          content = Path("pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+          assert match, "no se encontró la versión en pyproject.toml"
+          expected = match.group(1)
+          assert pyIol2.__version__ == expected, (
+              f"__version__ ({pyIol2.__version__}) != pyproject.toml ({expected})"
+          )
+          print("Package content OK:", pyIol2.__version__)
+          print(IOLClient, IOLStreamClient, Markets.BCBA, SettlementTerms.T1)
+          PY
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

@@ -1,0 +1,236 @@
+name: Publish
+
+# Publicación en TestPyPI y PyPI con PyPI Trusted Publishing (OIDC).
+# No se guardan API tokens: GitHub emite un token OIDC de corta duración en
+# cada ejecución y el índice lo valida contra el "trusted publisher" registrado.
+#
+# Configuración que el maintainer debe hacer UNA SOLA VEZ:
+#
+# 1. PyPI -> https://pypi.org/manage/account/publishing/
+#    Crear un trusted publisher para el proyecto `pyiol2-client` con:
+#      Owner:       ezeprimo
+#      Repository:  pyIol2
+#      Workflow:    publish.yml
+#      Environment: pypi
+#
+# 2. TestPyPI -> https://test.pypi.org/manage/account/publishing/
+#    Crear el mismo trusted publisher pero con Environment: testpypi
+#
+# 3. GitHub -> Settings -> Environments: crear los entornos `pypi` y `testpypi`.
+#    Ambos pueden exigir aprobación manual (Settings -> Environments ->
+#    <entorno> -> Required reviewers) y limitar qué ramas/tags pueden desplegar.
+#
+# 4. Publicar: `git tag v0.1.0 && git push origin v0.1.0` dispara esta workflow.
+#    La versión del tag (sin la `v`) debe coincidir con `version` de
+#    pyproject.toml; si no coincide, el job `validate` falla antes de publicar.
+#
+#    Las versiones prerelease (`-alpha`, `-beta`, `-rc`, `-dev`) se publican
+#    sólo en TestPyPI. Las estables van a TestPyPI y después a PyPI.
+#
+# 5. También se puede disparar a mano (workflow_dispatch) eligiendo el índice
+#    destino; en ese caso la versión sale de pyproject.toml.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Índice al que publicar"
+        type: choice
+        required: true
+        default: testpypi
+        options:
+          - testpypi
+          - pypi
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from pyproject.toml
+        id: get_pyproject_version
+        run: |
+          # Extract version from pyproject.toml
+          PYPROJECT_VERSION=$(python3 << 'EOF'
+          import re
+          with open('pyproject.toml', 'r', encoding='utf-8') as f:
+              content = f.read()
+          match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+          print(match.group(1) if match else '')
+          EOF
+          )
+          echo "pyproject.toml version: $PYPROJECT_VERSION"
+          echo "pyproject_version=$PYPROJECT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve version and validate match
+        id: resolve
+        run: |
+          PYPROJECT_VERSION="${{ steps.get_pyproject_version.outputs.pyproject_version }}"
+          if [ -z "$PYPROJECT_VERSION" ]; then
+            echo "::error::No se encontró la versión en pyproject.toml"
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # Tag push: la versión sale del tag, sin la `v` inicial.
+            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+
+            if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+              echo "::error::Version mismatch! Tag version ($TAG_VERSION) does not match pyproject.toml version ($PYPROJECT_VERSION)"
+              echo ""
+              echo "Please ensure the version in pyproject.toml matches your tag."
+              echo "Example: If you want to release v0.2.0, update pyproject.toml to version = \"0.2.0\""
+              exit 1
+            fi
+
+            echo "Version validation passed: $TAG_VERSION"
+            echo "tag=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_dispatch: no hay tag, se publica la versión del proyecto.
+            TAG_VERSION="$PYPROJECT_VERSION"
+            echo "Manual run from ${GITHUB_REF_NAME}: publishing version $TAG_VERSION"
+            echo "tag=v$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+
+          # Check if version contains prerelease identifiers
+          # Matches: alpha, beta, rc, dev followed by optional .N
+          # Examples: 0.1.0-beta.1, 0.2.0-alpha, 1.0.0-rc.2, 0.1.0-dev.1
+          if [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc|dev)(\.[0-9]+)?$ ]]; then
+            echo "Detected PRERELEASE version: $TAG_VERSION"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Detected PRODUCTION version: $TAG_VERSION"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate version script
+        run: python3 scripts/validate_version.py "${{ steps.resolve.outputs.tag }}"
+
+  checks:
+    name: Release checks
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Ruff
+        run: |
+          uv run ruff check pyIol2/ tests/ scripts/
+          uv run ruff format --check pyIol2/ tests/ scripts/
+
+      - name: Run tests
+        run: uv run pytest tests/ -q
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Validate distribution metadata
+        run: uv run --with twine twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  testpypi:
+    name: Publish to TestPyPI
+    needs: [validate, checks]
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi')
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/pyiol2-client
+    permissions:
+      contents: read
+      id-token: write  # Required for trusted publishing
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+      - name: Summary
+        run: |
+          echo "## Published to TestPyPI" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Prerelease: ${{ needs.validate.outputs.is_prerelease }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[View on TestPyPI](https://test.pypi.org/project/pyiol2-client/${{ needs.validate.outputs.version }}/)" >> "$GITHUB_STEP_SUMMARY"
+
+  pypi:
+    name: Publish to PyPI
+    needs: [validate, checks, testpypi]
+    # Sin el `!cancelled()`, GitHub omitiría este job cuando `testpypi` se saltea
+    # (workflow_dispatch con target=pypi).
+    if: |
+      !cancelled() &&
+      needs.checks.result == 'success' &&
+      (
+        (github.event_name == 'push' && needs.validate.outputs.is_prerelease == 'false') ||
+        (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+      )
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyiol2-client
+    permissions:
+      contents: read
+      id-token: write  # Required for trusted publishing
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Summary
+        run: |
+          echo "## Published to PyPI (Production)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[View on PyPI](https://pypi.org/project/pyiol2-client/${{ needs.validate.outputs.version }}/)" >> "$GITHUB_STEP_SUMMARY"

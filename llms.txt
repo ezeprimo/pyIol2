@@ -1,0 +1,46 @@
+# pyIol2 agent map
+
+pyIol2 is an unofficial Python client for the IOL Inversiones API v1 (REST at
+`api.iolinversiones.com` plus a market-data WebSocket). It is a separate
+distribution from the legacy `pyiol-client` (API v2) and shares no endpoint,
+symbol format, or constant values with it. Use the repository docs as the
+contract and verify names in the source before generating code.
+
+## Canonical documentation
+
+- Agent usage, streaming lifecycle and limits: `doc/agent-guide.md`
+- Public method reference: `doc/api-reference.md`
+- Read-only runnable recipes: `doc/recipes/`
+- Interactive notebooks (unexecuted): `doc/notebooks/`
+- Frozen vendor contract for API v1: `doc/vendor/iol-api-v1.md`
+- Package exports: `pyIol2/__init__.py`
+- Sync REST client: `pyIol2/client.py`
+- Async streaming client: `pyIol2/stream.py`
+- Dataclasses: `pyIol2/models.py`
+- Constants and defaults: `pyIol2/constants.py`
+- Typed errors: `pyIol2/exceptions.py`
+- Token lifecycle: `pyIol2/auth.py`
+
+## Quick map
+
+- Construct `IOLClient(username, password)` and prefer `with IOLClient(...) as client:`; the
+  REST client is synchronous. Only `IOLStreamClient` is async.
+- Use typed methods for application code and `_raw()` methods only when you need the raw
+  `data` payload; `_raw()` never returns `meta` or `error`.
+- Catch `IOLAPIError` (subclasses: `IOLAuthenticationError`, `IOLValidationError`,
+  `IOLNotFoundError`, `IOLRateLimitError`, `IOLServerError`, `IOLStreamError`) and report
+  `exc.trace_id` for support.
+- Use `Markets`, `SettlementTerms`, `Countries` and the `Stream*` constants instead of
+  protocol literals. Defaults are `Markets.BCBA`, `SettlementTerms.T0`, `Countries.ARGENTINA`.
+- Streaming needs `async with IOLStreamClient(...) as stream:` and
+  `async for message in stream.subscribe([...])`; always bound the loop and `break`.
+- Quotes and trades allow 50 symbols per connection, `order_book` allows 1 symbol per
+  connection; sharding is automatic above those limits.
+- Treat `create_order`, `create_repo`, `subscribe_fund`, `redeem_fund` and every cancel
+  method as real side effects on a real account.
+- Never retry an uncertain write: a timeout or 5xx does not prove the operation failed.
+  Reuse the same `idempotency_key` only for the same intended submission.
+- Credentials must stay in environment variables or a secret manager, and tokens must never
+  be logged.
+- `doc/` and `odd/` are excluded from the source distribution; the wheel contains only
+  `pyIol2`. These docs are repository documentation.

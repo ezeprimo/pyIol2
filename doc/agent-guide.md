@@ -1,0 +1,303 @@
+# pyIol2 Agent Guide
+
+Guia para agentes de IA que construyen aplicaciones con `pyiol2-client`. Se
+apoya en el codigo del repositorio, no en comportamiento no documentado de la
+API de IOL.
+
+## Camino Corto
+
+1. Instalar `pyiol2-client` y dejar las credenciales fuera del codigo.
+2. Elegir el cliente: `IOLClient` (sync, REST) o `IOLStreamClient` (async,
+   WebSocket).
+3. Empezar por metodos de lectura y por los modelos tipados.
+4. Antes de cualquier metodo que mueva dinero: validar, mostrar el resumen,
+   pedir confirmacion y guardar el `idempotency_key`.
+
+```python
+import os
+
+from pyIol2 import IOLAPIError, IOLClient
+
+with IOLClient(os.environ["IOL_USERNAME"], os.environ["IOL_PASSWORD"]) as client:
+    cotizacion = client.get_market_quote("GGAL")
+    print(cotizacion.prices.current, cotizacion.change.percent)
+```
+
+## Instalacion
+
+```bash
+uv add pyiol2-client     # o: pip install pyiol2-client
+```
+
+Para trabajar desde el repositorio: `uv sync --all-extras`. El runtime necesita
+Python `>=3.10`, `httpx`, `cachetools` y `websockets`.
+
+## Credenciales y Autenticacion
+
+Las credenciales se pasan al constructor y nunca se escriben en el codigo, los
+prompts, los logs ni los fixtures:
+
+```python
+import os
+
+username = os.environ["IOL_USERNAME"]
+password = os.environ["IOL_PASSWORD"]
+```
+
+`IOLClient` no autentica al construirse: pide el token en la primera request
+autenticada. `TokenManager` lo cachea en memoria y lo renueva con
+`refresh_token` antes de que venza. Si una request devuelve `401`, el cliente
+invalida el token y la reintenta **una sola vez**: ese status significa que la
+request fue rechazada antes de ejecutarse, asi que reintentarla no duplica
+efectos. Cualquier otro error se propaga sin reintento.
+
+`get_health_status()` es el unico metodo sin token y sirve para distinguir un
+problema de credenciales de un problema del servicio:
+
+```python
+with IOLClient(username, password) as client:
+    print(client.get_health_status().status)      # no requiere token
+    print(client.get_account_balances().ars.totals.t0)  # primera request autenticada
+```
+
+Nunca loguees `IOLToken.access_token` ni el header `Authorization`. Si necesitas
+diagnostico, loguea el path y el `trace_id`.
+
+## Sync vs Async
+
+| Tarea | Cliente | Modelo de ejecucion |
+|-------|---------|---------------------|
+| Cotizaciones, cuenta, ordenes, FCI, cauciones, watchlists | `IOLClient` | Sincronico, `with` |
+| Market data en tiempo real | `IOLStreamClient` | Asincronico, `async with` |
+
+`IOLClient` usa `httpx.Client` y acepta un `client=` ya configurado y un
+`timeout` en segundos (30 por defecto). No hay version async del cliente REST:
+si tu aplicacion es asincronica, corre las llamadas REST en un thread
+(`asyncio.to_thread`) y deja el WebSocket en el loop.
+
+```python
+import asyncio
+
+from pyIol2 import IOLClient
+
+
+async def leer_posiciones(username: str, password: str):
+    def run():
+        with IOLClient(username, password) as client:
+            return client.get_positions()
+
+    return await asyncio.to_thread(run)
+```
+
+## Regla de `_raw()`
+
+Cada metodo tipado tiene un gemelo `_raw()` con la misma firma.
+
+- El metodo tipado devuelve una dataclass exportada por `pyIol2` y usa nombres
+  en snake_case (`prices.current`, `change.percent`).
+- El metodo `_raw()` devuelve el campo `data` de la respuesta, sin normalizar y
+  sin el sobre: **no** incluye `meta` ni `error`. Si necesitas el `trace_id` de
+  una respuesta exitosa, hoy no esta disponible por la API publica; el
+  `trace_id` de los errores viene en la excepcion.
+- Usa `_raw()` solo cuando necesites un campo que el modelo no expone, y
+  aislalo en un adaptador: no dejes diccionarios de la API en el dominio.
+
+```python
+with IOLClient(username, password) as client:
+    crudo = client.get_market_quote_raw("GGAL")
+    print(crudo["prices"]["current"])   # nombres de la API, no del modelo
+```
+
+## Errores y `trace_id`
+
+Todo fallo de red, de contrato o de la API se propaga como `IOLAPIError` o una
+subclase. La excepcion trae `status_code`, `code`, `trace_id`, `details`,
+`method`, `path` y `payload`.
+
+| Excepcion | Cuando aparece |
+|-----------|----------------|
+| `IOLAuthenticationError` | `401` / `403`: credenciales, token o permisos |
+| `IOLValidationError` | `400` / `422`, o validacion local antes de enviar |
+| `IOLNotFoundError` | `404`: simbolo o recurso inexistente |
+| `IOLRateLimitError` | `429`: limite de requests |
+| `IOLServerError` | `5xx`: error del servidor de IOL |
+| `IOLStreamError` | error del WebSocket (`type: "Error"`), con `ws_code` |
+| `IOLAPIError` | base: conexion, respuesta no JSON y cualquier otro caso |
+
+```python
+from pyIol2 import IOLAPIError, IOLClient
+
+try:
+    with IOLClient(username, password) as client:
+        client.get_market_quote("NOEXISTE")
+except IOLAPIError as exc:
+    print(exc.status_code, exc.code)
+    print(f"trace_id={exc.trace_id}")   # este dato pide el soporte de IOL
+    raise
+```
+
+Reglas:
+
+- Captura `IOLAPIError` en el borde de la aplicacion y traduce a tu dominio; no
+  dejes escapar el `payload` crudo a la UI.
+- Un `IOLValidationError` de validacion local significa que la request **nunca
+  salio**: es seguro corregir y volver a intentar.
+- Un `IOLStreamError` con `ws_code == 401` puede ser un token vencido **o** una
+  suscripcion de `order_book` con mas de un simbolo. Revisa el pedido antes de
+  renovar el token.
+- Un `429` o un `5xx` no se reintentan solos: decidilo vos, con backoff y solo
+  en lecturas.
+
+## Ciclo de Vida del Streaming
+
+```python
+import asyncio
+
+from pyIol2 import IOLStreamClient
+
+
+async def main():
+    async with IOLStreamClient(username, password) as stream:      # 1. auth
+        async for message in stream.subscribe(                     # 2. subscribe
+            ["GGAL", "YPFD"],
+            quotes=True,
+            trades=True,
+        ):
+            print(message.type, message.symbol)
+            break                                                  # 4. teardown
+
+
+asyncio.run(main())
+```
+
+1. **Auth**: el cliente pide el token OAuth (o usa el que le pasaste con
+   `token=`) y manda `{"action": "auth_token", "token": ...}` en cada conexion.
+   Si el servidor rechaza la sesion, levanta `IOLStreamError`.
+2. **Subscribe**: manda `{"action": "subscribe", "trades": [...], "quotes": [...],
+   "order_book": [...]}` con identificadores `SIMBOLO|MERCADO|PLAZO`. Los tres
+   canales van siempre; los que no pediste van como lista vacia.
+3. **Heartbeat**: el cliente manda un `ping` cada 15 segundos mientras la
+   conexion este abierta. El servidor no hace ping, asi que no lo desactives.
+4. **Teardown**: al salir del `async for` o del `async with`, `close()` cancela
+   las tareas y cierra las conexiones. La libreria **no** manda un frame
+   `unsubscribe`: cerrar la conexion termina la suscripcion. Las constantes de
+   `StreamActions` existen para el protocolo, pero no hay un metodo publico de
+   baja parcial; para cambiar de simbolos, corta y volve a suscribirte.
+
+Detalles que importan:
+
+- `subscribe()` es un generador asincronico: sin `break` o sin cancelacion, el
+  `async for` espera mensajes para siempre.
+- La reconexion es automatica con backoff exponencial (1s hasta 30s, 5
+  intentos por conexion) y vuelve a autenticar y a suscribir.
+- Si una conexion muere de forma definitiva, el error se publica en el
+  consumidor: el `async for` levanta `IOLStreamError` en vez de quedarse
+  colgado.
+- `StreamMessage` trae `type` (`Q` puntas, `B` profundidad, `T` operaciones),
+  `symbol`, `market`, `term`, el sub-modelo correspondiente (`quote`,
+  `order_book`, `trade`) y `raw` con el JSON original.
+
+## Limites del Streaming
+
+| Canal | Limite | Que hace la libreria |
+|-------|--------|----------------------|
+| `quotes` y `trades` | 50 simbolos por conexion | Reparte en varias conexiones sola |
+| `order_book` | 1 simbolo por conexion | Rechaza con `IOLValidationError` si pides mas de uno |
+| Canales por llamada | al menos uno | `IOLValidationError` si no pedis ninguno |
+| Simbolos por llamada | al menos uno | `IOLValidationError` con lista vacia |
+
+El reparto automatico es por cantidad de simbolos: si pedis 120 simbolos de
+puntas, la libreria abre tres conexiones y las alimenta con la misma cola. La
+profundidad no se reparte: pedila de a un titulo por vez.
+
+```python
+# Bien: profundidad de un solo titulo
+async for message in stream.subscribe(["GGAL"], quotes=False, trades=False, order_book=True):
+    ...
+
+# Error: IOLValidationError
+async for message in stream.subscribe(["GGAL", "YPFD"], order_book=True):
+    ...
+```
+
+## Nunca Reintentar una Escritura Incierta
+
+Estos metodos tienen efectos reales sobre la cuenta:
+
+- `create_order()`, `cancel_order()`
+- `create_repo()`, `cancel_repo()`
+- `subscribe_fund()`, `redeem_fund()`, `cancel_fund_operation()`
+- `create_watchlist()`, `rename_watchlist()`, `delete_watchlist()`,
+  `add_watchlist_item()`, `remove_watchlist_item()` (sin dinero, pero mutan
+  estado de la cuenta)
+
+Regla: **un timeout, un corte de conexion o un `5xx` no prueban que la
+operacion no se ejecuto.** Antes de reenviar:
+
+1. Consulta `get_trading_operations(...)` o `get_account_activities(...)` y
+   busca la operacion por simbolo, cantidad y horario.
+2. Si la operacion existe, reconcilia con el `order_id` / `transaction_id` en
+   lugar de reenviar.
+3. Si vas a reenviar la misma intencion, reutiliza el mismo `idempotency_key`:
+   los endpoints de ordenes, cauciones y FCI lo exigen en el header
+   `X-Idempotency-Key`. Si no lo pasas, el cliente genera uno nuevo por llamada
+   (UUID v4), asi que dos llamadas son dos operaciones.
+
+Antes de enviar cualquier escritura, usa la estimacion cuando exista:
+`estimate_order()` y `estimate_repo()` calculan comisiones y cargos;
+`validate_fund_subscription()` y `validate_fund_redemption()` validan la
+operacion de FCI. Ninguna de las cuatro tiene efectos.
+
+Y valida localmente lo que el cliente ya valida, para no depender de la
+excepcion: `quantity` XOR `notional`, `limit_price` obligatorio si
+`order_type="limit"`, `rate` obligatorio si `price_type="limit"`, y
+`quantity` XOR `redeem_all` en rescates de FCI.
+
+## Simbolos Utiles
+
+| Simbolo | Para que |
+|---------|----------|
+| `IOLClient` | Cliente REST sincronico |
+| `IOLStreamClient` | Cliente WebSocket asincronico |
+| `StreamMessage` | Mensaje del WebSocket |
+| `IOLAPIError` y subclases | Manejo de errores |
+| `Markets` | `BCBA`, `NYSE`, `NASDAQ`, `AMEX` |
+| `SettlementTerms` | `T0`, `T1` |
+| `Countries` | `ARGENTINA`, `USA`, `ALL` |
+| `StreamChannels` | `QUOTES`, `ORDER_BOOK`, `TRADES` |
+| `StreamMessageTypes` | `QUOTE`, `ORDER_BOOK`, `TRADES`, `ERROR` |
+| `StreamActions` | Acciones del protocolo WebSocket |
+| `MarketQuote`, `MarketDepth` | Cotizacion y libro |
+| `ScreenerEntry`, `OptionQuote`, `HistoricalBars` | Listados, opciones e historicos |
+| `AccountBalances`, `Portfolio`, `Position` | Cuenta y cartera |
+| `Activity`, `Operation`, `PortfolioHistory` | Movimientos y evolucion |
+| `OrderEstimate`, `OrderResult`, `CancelResult` | Ordenes |
+| `RepoTerm`, `RepoQuote`, `RepoEstimate`, `RepoOrderResult` | Cauciones |
+| `FundValidationResult`, `FundOperationResult`, `FundCancelResult` | FCI |
+| `Watchlist`, `WatchlistItem` | Listas de favoritos |
+| `IOLToken`, `TokenManager` | Autenticacion |
+
+## Arquitectura de una Aplicacion
+
+- **Adaptador de infraestructura**: es el unico lugar que importa `pyIol2`,
+  posee las credenciales, el cliente y la traduccion de errores.
+- **Servicios**: eligen endpoints, aplican reglas de negocio y limites, y piden
+  confirmacion antes de un efecto.
+- **Modelos de dominio**: guardan los valores que la aplicacion necesita; no
+  exponen los `dict` de la API.
+- **Jobs y UI**: leen o envian comandos aprobados; nunca reintentan una orden a
+  ciegas.
+- **Auditoria**: registra timestamps, entradas, `order_id` y respuestas
+  saneadas para conciliar.
+
+Separa el objeto que lee del que escribe: un servicio que solo muestra precios
+no deberia tener en la mano algo capaz de enviar ordenes. Inyecta el adaptador
+para poder testear con `httpx.MockTransport` y un WebSocket falso.
+
+## Lectura Adicional
+
+- [`api-reference.md`](./api-reference.md): firma y retorno de cada metodo.
+- [`recipes/`](./recipes/): scripts cortos de solo lectura.
+- [`notebooks/`](./notebooks/): recorrido interactivo.
+- [`vendor/iol-api-v1.md`](./vendor/iol-api-v1.md): contrato congelado de la API.
+- [`../SECURITY.md`](../SECURITY.md): como reportar un problema de seguridad.
