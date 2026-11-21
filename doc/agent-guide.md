@@ -225,8 +225,10 @@ async for message in stream.subscribe(["GGAL", "YPFD"], order_book=True):
 Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
 
 - **`settlement_term` es obligatorio de hecho.** El contrato lo marca opcional,
-  pero sin el la API responde `400`. La libreria manda `T1` por defecto;
-  `estimate_order` y `create_order` aceptan otro valor.
+  pero sin el la API responde `400`. `estimate_order` y `create_order` mandan
+  `DEFAULT_ORDER_SETTLEMENT_TERM` (`T1`) por defecto y aceptan otro valor. El
+  default de market data y streaming (`DEFAULT_SETTLEMENT_TERM`) sigue en `T0`:
+  son dos constantes distintas a proposito.
 - **El limite tiene banda de precio.** Un precio muy lejos del mercado se
   rechaza con `422` y `code: "ORDER_REJECTED"`; en las pruebas, `0.25x` del
   ultimo fue rechazado y `0.95x` fue aceptado. No hay documentacion del ancho de

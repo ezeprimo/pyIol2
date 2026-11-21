@@ -22,8 +22,11 @@ project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - `estimate_order()` y `create_order()` ahora mandan siempre `settlement_term`
-  (por defecto `T1`): la API responde `400` si falta, aunque el contrato lo
-  marque opcional. Probado contra produccion.
+  (por defecto `DEFAULT_ORDER_SETTLEMENT_TERM`, `T1`): la API responde `400` si
+  falta, aunque el contrato lo marque opcional. Probado contra produccion.
+  `DEFAULT_SETTLEMENT_TERM` (market data y streaming) se mantiene en `T0`:
+  cambiar el default de los dos caminos a la vez movia sin querer el feed que
+  piden los consumidores de streaming.
 
 - Los errores de transporte (`httpx.HTTPError`) levantan `IOLConnectionError`,
   que se exportaba pero nunca se usaba.

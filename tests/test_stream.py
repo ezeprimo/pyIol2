@@ -115,7 +115,7 @@ def make_stream(server: FakeServer, **kwargs: Any) -> IOLStreamClient:
 
 
 def test_build_symbol_id_usa_el_formato_documentado():
-    assert build_symbol_id("GGAL", "BCBA", "T1") == "GGAL|BCBA|T1"
+    assert build_symbol_id("GGAL", "BCBA", "T0") == "GGAL|BCBA|T0"
 
 
 async def test_sin_credenciales_ni_token_falla():
@@ -158,7 +158,7 @@ async def test_autenticacion_y_suscripcion_arman_el_mensaje_documentado():
     assert server.sent[1] == {
         "action": "subscribe",
         "trades": [],
-        "quotes": ["GGAL|BCBA|T1"],
+        "quotes": ["GGAL|BCBA|T0"],
         "order_book": [],
     }
 
@@ -172,7 +172,7 @@ async def test_las_tres_claves_de_subscribe_siempre_viajan():
 
     subscribe = server.sent[1]
     assert set(subscribe) == {"action", "trades", "quotes", "order_book"}
-    assert subscribe["quotes"] == subscribe["trades"] == ["GGAL|BCBA|T1"]
+    assert subscribe["quotes"] == subscribe["trades"] == ["GGAL|BCBA|T0"]
 
 
 async def test_entrega_los_mensajes_en_orden():
@@ -222,7 +222,7 @@ async def test_order_book_abre_una_conexion_propia():
         await pending
     await agen.aclose()
 
-    assert server.sent[1]["order_book"] == ["GGAL|BCBA|T1"]
+    assert server.sent[1]["order_book"] == ["GGAL|BCBA|T0"]
     assert server.sent[1]["quotes"] == []
 
 
@@ -296,11 +296,11 @@ async def test_unsubscribe_da_de_baja_sin_cerrar_la_conexion():
     removed = await stream.unsubscribe(["GGAL"])
     await asyncio.sleep(0.02)
 
-    assert removed == ["GGAL|BCBA|T1"]
+    assert removed == ["GGAL|BCBA|T0"]
     assert {
         "action": "unsubscribe",
-        "trades": ["GGAL|BCBA|T1"],
-        "quotes": ["GGAL|BCBA|T1"],
+        "trades": ["GGAL|BCBA|T0"],
+        "quotes": ["GGAL|BCBA|T0"],
         "order_book": [],
     } in server.sent
 

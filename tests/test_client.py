@@ -526,3 +526,20 @@ def test_create_order_respeta_settlement_term_explicito(client, stub):
     client.create_order("GGAL", "buy", quantity=1, settlement_term="T0")
 
     assert stub.last("POST", "/broker/orders")["body"]["settlement_term"] == "T0"
+
+
+def test_el_default_de_streaming_no_cambia_por_el_de_las_ordenes(client, stub):
+    # Hallazgo del review: el plazo de ordenes es T1, el de market data sigue T0.
+    stub.set("GET", "/broker/market-data/GGAL/quote", QUOTE_PAYLOAD)
+
+    client.get_market_quote("GGAL")
+
+    assert stub.last("GET", "/broker/market-data/GGAL/quote")["params"]["term"] == "T0"
+
+
+def test_settlement_term_vacio_no_se_pisa(client, stub):
+    stub.set("POST", "/broker/orders", ORDER_RESULT_PAYLOAD, status=201)
+
+    client.create_order("GGAL", "buy", quantity=1, settlement_term="")
+
+    assert stub.last("POST", "/broker/orders")["body"]["settlement_term"] == ""

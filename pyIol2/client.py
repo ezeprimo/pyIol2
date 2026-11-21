@@ -11,6 +11,7 @@ from .constants import (
     API_BASE_URL,
     DEFAULT_COUNTRY,
     DEFAULT_MARKET,
+    DEFAULT_ORDER_SETTLEMENT_TERM,
     DEFAULT_SETTLEMENT_TERM,
     DEFAULT_TIMEOUT,
     USER_AGENT,
@@ -1116,7 +1117,9 @@ class IOLClient:
             "due_date": due_date or date.today().isoformat(),
             # La API responde 400 si falta `settlement_term`, aunque el contrato
             # lo marque como opcional: siempre mandamos uno.
-            "settlement_term": settlement_term or DEFAULT_SETTLEMENT_TERM,
+            "settlement_term": (
+                settlement_term if settlement_term is not None else DEFAULT_ORDER_SETTLEMENT_TERM
+            ),
         }
         if quantity is not None:
             body["quantity"] = quantity

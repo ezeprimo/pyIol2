@@ -191,3 +191,27 @@ sending a real order. The accepted-sell path is still unverified (L21).
 L21 (open): retest the sell path during trading hours and find out whether the
 rejection is a pre-condition of the closed market or something about the
 account's sell permissions.
+
+L22 (fix, from the native review findings): the escalated review's findings were
+real. Corrections applied in a separate work unit:
+
+- R3-001 / R4-001: changing the shared `DEFAULT_SETTLEMENT_TERM` from `T0` to
+  `T1` also moved the WebSocket subscription default, an unrequested feed change
+  for stream consumers. Market data keeps `T0`; orders now use their own
+  `DEFAULT_ORDER_SETTLEMENT_TERM = T1`.
+- R1-SETTLEMENT-FALSY (refuted, still a wart): `settlement_term or default`
+  replaced an explicitly empty value; now only `None` falls back.
+- R1-ORDER-UNCERTAIN / R3-002 / R4-003: the round-trip script registered an
+  order id only after logging, so a broken stdout or a parsing failure after the
+  broker accepted could leave a live order uncancelled. The id is now recorded
+  immediately, printing can never raise, and an ambiguous `create_order` is
+  reconciled against the day's operations instead of being retried.
+- R4-002: cancellation now removes the id from the alive list before printing.
+- R1-ORDER-ROUNDING (refuted, still a wart): limits are computed so they never
+  equal the reference price, and the script aborts before sending anything if
+  the cushion is not real.
+- R3-003: verification failures now affect the exit status.
+
+Re-verified against production after the corrections: buy COME accepted
+(196806828), verified as `pending`, cancelled (`cancelled=True`), no live orders;
+the sell is still rejected with the opaque `ORDER_REJECTED` (open, L21).

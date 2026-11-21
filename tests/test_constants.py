@@ -65,5 +65,6 @@ def test_urls_de_la_api():
 
 def test_defaults_coherentes():
     assert constants.DEFAULT_MARKET == Markets.BCBA
-    assert constants.DEFAULT_SETTLEMENT_TERM == SettlementTerms.T1
+    assert constants.DEFAULT_SETTLEMENT_TERM == SettlementTerms.T0
+    assert constants.DEFAULT_ORDER_SETTLEMENT_TERM == SettlementTerms.T1
     assert constants.DEFAULT_COUNTRY == Countries.ARGENTINA
