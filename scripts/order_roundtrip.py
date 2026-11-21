@@ -29,6 +29,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from pyIol2 import IOLAPIError, IOLClient, Markets, SettlementTerms
+from pyIol2.constants import DEFAULT_ORDER_SETTLEMENT_TERM
 
 # Compra: activo que no requiere tenencia previa.
 BUY_SYMBOL = "COME"
@@ -161,6 +162,7 @@ def _open_orders(client: IOLClient, day: str) -> list[dict[str, Any]]:
             "status": operation.status,
             "qty": operation.order.qty,
             "price": operation.order.price,
+            "term": operation.term,
         }
         for operation in operations
         if str(operation.status).lower() not in CLOSED_STATUSES
@@ -193,9 +195,10 @@ def _reconcile(
     client: IOLClient,
     day: str,
     symbol: str,
+    term: str,
     price: float,
     quantity: float,
-    already: list[str],
+    baseline: set[str],
 ) -> list[str]:
     """
     Busca ordenes que coincidan con un alta que quedo ambigua.
@@ -204,16 +207,20 @@ def _reconcile(
     el id. Se reconcilia contra las operaciones del dia en lugar de reintentar:
     el alta es incierta, no fallida.
 
+    Solo se consideran ordenes que aparecieron despues del `baseline` tomado
+    antes de mandar nada: una orden previa del usuario jamas se toca.
+
     Returns:
-        Ids de ordenes vivas que no estaban registradas
+        Ids de ordenes que aparecieron y no estaban antes de empezar
     """
     matches = [
         order["order_id"]
         for order in _open_orders(client, day)
         if order["symbol"] == symbol
+        and order["order_id"] not in baseline
+        and (order.get("term") in (None, "", term))
         and abs(float(order["price"]) - float(price)) < TICK / 2
         and abs(float(order["qty"]) - float(quantity)) < TICK / 2
-        and order["order_id"] not in already
     ]
     return matches
 
@@ -314,7 +321,16 @@ def main() -> int:
             _say("Sin --yes no se manda nada. Repetir con --yes para ejecutar.")
             return 0
 
+        # Foto de lo que ya esta vivo: la limpieza solo puede tocar lo que
+        # aparezca despues de este punto.
         try:
+            baseline = {order["order_id"] for order in _open_orders(client, day)}
+        except IOLAPIError as exc:
+            _say(f"FALLA: no se pudo leer el estado inicial de ordenes: {_error(exc)}")
+            return 2
+
+        try:
+            term = DEFAULT_ORDER_SETTLEMENT_TERM
             for symbol, side, market, limit in (
                 (BUY_SYMBOL, "buy", MARKET, buy_limit),
                 (sell_symbol, "sell", sell_market, sell_limit),
@@ -334,9 +350,16 @@ def main() -> int:
                     _describe(f"{label} RECHAZADA", _full_error(exc))
                     # El alta es incierta: puede haberse aceptado y fallado la
                     # respuesta. Se reconcilia en lugar de reintentar.
-                    recovered = _reconcile(client, day, symbol, limit, QUANTITY, alive)
+                    try:
+                        recovered = _reconcile(client, day, symbol, term, limit, QUANTITY, baseline)
+                    except IOLAPIError as reconcile_exc:
+                        problems.append(
+                            f"alta ambigua de {symbol} sin reconciliar: {_error(reconcile_exc)}"
+                        )
+                        _describe("[RECONCILE FALLA]", _error(reconcile_exc))
+                        break
                     for order_id in recovered:
-                        _describe("[RECONCILIADA]", f"{order_id} aparece viva en la cuenta")
+                        _describe("[RECONCILIADA]", f"{order_id} aparecio viva")
                         alive.append(order_id)
                     continue
 
