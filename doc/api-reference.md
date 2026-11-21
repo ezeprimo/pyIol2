@@ -444,6 +444,23 @@ Abre las conexiones necesarias y devuelve un iterador de mensajes.
 - **Limites** 50 simbolos por conexion para `quotes`/`trades` (reparto
   automatico); 1 para `order_book`.
 
+### `unsubscribe(symbols, *, market=Markets.BCBA, term=SettlementTerms.T0)`
+
+Da de baja activos sin cerrar las conexiones abiertas.
+
+- `symbols` (`list[str]`) — simbolos a desuscribir.
+- `market` (`str`), `term` (`str`) — mercado y plazo de esos simbolos.
+- **Retorna** `list[str]` con los identificadores `SIMBOLO|MERCADO|PLAZO` que
+  estaban efectivamente suscriptos; si viene vacia, no habia nada que dar de
+  baja y la libreria no manda ningun frame.
+- **Cuando usarlo** para achicar el seguimiento sin reconectar. La conexion
+  sigue viva y los mensajes ya suscriptos siguen llegando.
+
+### `unsubscribe_all()`
+
+Da de baja todas las suscripciones de todas las conexiones abiertas, sin
+cerrarlas. No devuelve nada.
+
 ### `StreamMessage`
 
 Mensaje tipado del WebSocket.
@@ -600,5 +617,5 @@ importan desde `pyIol2`. Los modelos anidados se documentan dentro de su padre.
 | `IOLNotFoundError` | `IOLAPIError` | `404` |
 | `IOLRateLimitError` | `IOLAPIError` | `429` |
 | `IOLServerError` | `IOLAPIError` | `5xx` |
-| `IOLConnectionError` | `IOLAPIError` | Reservada para fallos de conexion; hoy el cliente propaga `IOLAPIError` |
+| `IOLConnectionError` | `IOLAPIError` | Fallo de conexion HTTP o de red antes de obtener respuesta |
 | `IOLStreamError` | `IOLAPIError` | Error del WebSocket; agrega `ws_code` |

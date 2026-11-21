@@ -179,10 +179,10 @@ asyncio.run(main())
 3. **Heartbeat**: el cliente manda un `ping` cada 15 segundos mientras la
    conexion este abierta. El servidor no hace ping, asi que no lo desactives.
 4. **Teardown**: al salir del `async for` o del `async with`, `close()` cancela
-   las tareas y cierra las conexiones. La libreria **no** manda un frame
-   `unsubscribe`: cerrar la conexion termina la suscripcion. Las constantes de
-   `StreamActions` existen para el protocolo, pero no hay un metodo publico de
-   baja parcial; para cambiar de simbolos, corta y volve a suscribirte.
+   las tareas y cierra las conexiones. Si solo querés dejar de seguir algunos
+   simbolos, usá `unsubscribe(symbols, market=..., term=...)` o
+   `unsubscribe_all()`: mandan el frame correspondiente y dejan la conexión
+   abierta. Cerrar la conexión también termina la suscripción.
 
 Detalles que importan:
 

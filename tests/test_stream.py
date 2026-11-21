@@ -284,3 +284,57 @@ async def test_close_libera_las_tareas():
     await agen.aclose()
 
     assert stream._tasks == []
+
+
+async def test_unsubscribe_da_de_baja_sin_cerrar_la_conexion():
+    server = FakeServer([quote_message(), quote_message()], delay=0.05)
+    stream = make_stream(server)
+
+    agen = stream.subscribe(["GGAL"])
+    await asyncio.wait_for(anext(agen), timeout=5)
+
+    removed = await stream.unsubscribe(["GGAL"])
+    await asyncio.sleep(0.02)
+
+    assert removed == ["GGAL|BCBA|T0"]
+    assert {
+        "action": "unsubscribe",
+        "trades": ["GGAL|BCBA|T0"],
+        "quotes": ["GGAL|BCBA|T0"],
+        "order_book": [],
+    } in server.sent
+
+    # La conexion sigue abierta: el mensaje siguiente todavia llega.
+    following = await asyncio.wait_for(anext(agen), timeout=5)
+    await agen.aclose()
+
+    assert following.symbol == "GGAL"
+
+
+async def test_unsubscribe_de_algo_no_suscripto_no_manda_nada():
+    server = FakeServer([quote_message(), quote_message()], delay=0.05)
+    stream = make_stream(server)
+
+    agen = stream.subscribe(["GGAL"])
+    await asyncio.wait_for(anext(agen), timeout=5)
+
+    removed = await stream.unsubscribe(["YPFD"])
+    await asyncio.sleep(0.02)
+    await agen.aclose()
+
+    assert removed == []
+    assert all(frame["action"] != "unsubscribe" for frame in server.sent)
+
+
+async def test_unsubscribe_all_limpia_las_suscripciones():
+    server = FakeServer([quote_message(), quote_message()], delay=0.05)
+    stream = make_stream(server)
+
+    agen = stream.subscribe(["GGAL", "YPFD"])
+    await asyncio.wait_for(anext(agen), timeout=5)
+
+    await stream.unsubscribe_all()
+    await asyncio.sleep(0.02)
+    await agen.aclose()
+
+    assert {"action": "unsubscribe_all"} in server.sent

@@ -25,6 +25,7 @@ from .constants import (
     STREAM_MAX_SYMBOLS_PER_CONNECTION,
     GrantTypes,
     StreamActions,
+    StreamChannels,
     StreamMessageTypes,
 )
 from .exceptions import IOLStreamError, IOLValidationError
@@ -158,6 +159,7 @@ class _MarketDataConnection:
         self._max_attempts = max_attempts
         self._reconnect_delay = reconnect_delay
         self._max_reconnect_delay = max_reconnect_delay
+        self._control: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     async def run(self) -> None:
         """
@@ -197,13 +199,16 @@ class _MarketDataConnection:
             await self._await_auth(websocket)
             await websocket.send(json.dumps(self._subscribe_payload()))
             heartbeat = asyncio.create_task(self._heartbeat(websocket))
+            control = asyncio.create_task(self._pump_control(websocket))
             try:
                 async for raw in websocket:
                     await self._handle(json.loads(raw))
             finally:
-                heartbeat.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await heartbeat
+                for task in (heartbeat, control):
+                    task.cancel()
+                for task in (heartbeat, control):
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
 
     async def _await_auth(self, websocket: Any) -> None:
         """Espera la respuesta de autenticacion y falla si la rechaza."""
@@ -236,6 +241,50 @@ class _MarketDataConnection:
         while True:
             await asyncio.sleep(self._heartbeat_interval)
             await websocket.send(json.dumps({"action": StreamActions.PING}))
+
+    async def _pump_control(self, websocket: Any) -> None:
+        """Envia los mensajes de control que encola el cliente."""
+        while True:
+            frame = await self._control.get()
+            await websocket.send(json.dumps(frame))
+
+    def subscribed_ids(self) -> list[str]:
+        """Identificadores de activo suscriptos en esta conexion."""
+        return sorted(set(self._quotes) | set(self._trades) | set(self._order_book))
+
+    async def unsubscribe(self, symbol_ids: list[str]) -> list[str]:
+        """
+        Da de baja los activos indicados en esta conexion.
+
+        Args:
+            symbol_ids: Identificadores `SYMBOL|MARKET|TERM` a desuscribir
+
+        Returns:
+            Los identificadores que esta conexion tenia efectivamente suscriptos
+        """
+        frame: dict[str, Any] = {"action": StreamActions.UNSUBSCRIBE}
+        removed: list[str] = []
+        for channel, current in (
+            (StreamChannels.TRADES, self._trades),
+            (StreamChannels.QUOTES, self._quotes),
+            (StreamChannels.ORDER_BOOK, self._order_book),
+        ):
+            matches = [symbol_id for symbol_id in current if symbol_id in symbol_ids]
+            frame[channel] = matches
+            for symbol_id in matches:
+                if symbol_id not in removed:
+                    removed.append(symbol_id)
+                current.remove(symbol_id)
+        if removed:
+            await self._control.put(frame)
+        return removed
+
+    async def unsubscribe_all(self) -> None:
+        """Da de baja todas las suscripciones de esta conexion."""
+        self._quotes.clear()
+        self._trades.clear()
+        self._order_book.clear()
+        await self._control.put({"action": StreamActions.UNSUBSCRIBE_ALL})
 
     async def _handle(self, payload: dict[str, Any]) -> None:
         """Traduce un mensaje entrante y lo publica en la cola."""
@@ -301,6 +350,7 @@ class IOLStreamClient:
         self._token = token
         self._connect = connect_factory or _default_connect()
         self._tasks: list[asyncio.Task] = []
+        self._connections: list[_MarketDataConnection] = []
 
     async def __aenter__(self) -> "IOLStreamClient":
         return self
@@ -316,6 +366,7 @@ class IOLStreamClient:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks.clear()
+        self._connections.clear()
 
     async def get_access_token(self) -> str:
         """
@@ -409,8 +460,10 @@ class IOLStreamClient:
                 )
             ]
         else:
+            # Cada canal lleva su propia lista: compartir la misma instancia
+            # haria que un unsubscribe vaciara los dos canales a la vez.
             plans = [
-                (shard if quotes else [], shard if trades else [], [])
+                (list(shard) if quotes else [], list(shard) if trades else [], [])
                 for shard in self._shards(symbol_ids)
             ]
 
@@ -428,6 +481,7 @@ class IOLStreamClient:
                 reconnect_delay=STREAM_DEFAULT_RECONNECT_DELAY_SECONDS,
                 max_reconnect_delay=STREAM_MAX_RECONNECT_DELAY_SECONDS,
             )
+            self._connections.append(connection)
             self._tasks.append(asyncio.create_task(self._run_connection(connection, queue)))
 
         try:
@@ -440,6 +494,36 @@ class IOLStreamClient:
                 yield message
         finally:
             await self.close()
+
+    async def unsubscribe(
+        self,
+        symbols: list[str],
+        *,
+        market: str = DEFAULT_MARKET,
+        term: str = DEFAULT_SETTLEMENT_TERM,
+    ) -> list[str]:
+        """
+        Da de baja activos sin cerrar las conexiones.
+
+        Args:
+            symbols: Simbolos a desuscribir
+            market: Mercado de esos simbolos
+            term: Plazo de liquidacion de esos simbolos
+
+        Returns:
+            Los identificadores que estaban efectivamente suscriptos y se dieron
+            de baja; si la lista viene vacia, no habia nada que desuscribir
+        """
+        symbol_ids = [build_symbol_id(symbol, market, term) for symbol in symbols]
+        removed: list[str] = []
+        for connection in self._connections:
+            removed.extend(await connection.unsubscribe(symbol_ids))
+        return removed
+
+    async def unsubscribe_all(self) -> None:
+        """Da de baja todas las suscripciones de todas las conexiones abiertas."""
+        for connection in self._connections:
+            await connection.unsubscribe_all()
 
     @staticmethod
     async def _run_connection(connection: _MarketDataConnection, queue: asyncio.Queue) -> None:

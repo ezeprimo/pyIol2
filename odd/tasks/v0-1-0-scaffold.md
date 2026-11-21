@@ -118,3 +118,23 @@ L14 (blocker, environment): the harness safety policy blocks creating
 `.env.example` in this session, so the README documents the two environment
 variables instead of pointing at a copyable example file. The maintainer can add
 the file by hand if the conventional layout is wanted.
+
+L15 (evidence, T8): worker `mwqe6fby-2-0tng` delivered `ci.yml`, `security.yml`,
+`publish.yml`, `scripts/validate_version.py`, `renovate.json` and the GitHub
+templates. Verified independently: the three workflows parse as YAML and
+`scripts/validate_version.py v0.1.0` exits 0 with the production path. Neither
+workflow has run on GitHub yet.
+
+L16 (evidence, T9/T10): worker `mwqe6fc6-3-u9ga` delivered README, CONTRIBUTING,
+SECURITY, CHANGELOG, RELEASE_CHECKLIST, llms.txt, `doc/README.md`,
+`doc/agent-guide.md`, `doc/api-reference.md`, 5 recipes and 4 nbformat-4
+notebooks. Verified: recipes pass ruff and `ast.parse`, notebooks pass
+`nbformat.validate` with `execution_count` null and `outputs` empty.
+
+L17 (fix, from L16 contradictions): `IOLConnectionError` was exported but never
+raised; `client.py` and `auth.py` now raise it on `httpx.HTTPError` and a test
+covers it. `StreamActions.UNSUBSCRIBE/UNSUBSCRIBE_ALL` had no public method, so
+`IOLStreamClient.unsubscribe()` and `unsubscribe_all()` now exist, with their
+own control-frame pump per connection. The tests caught a real aliasing bug:
+`quotes` and `trades` shared the same list instance, so unsubscribing from one
+channel emptied the other.
