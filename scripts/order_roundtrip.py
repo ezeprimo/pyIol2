@@ -280,9 +280,12 @@ def _within_window(order_date: str, sent_at: datetime) -> bool:
     Returns:
         True si cae dentro de la ventana de tolerancia
     """
+    if not isinstance(order_date, str):
+        # El feed entrega strings: aceptar otra cosa escondaria un error de tipo.
+        return False
     try:
-        created = datetime.fromisoformat(str(order_date))
-    except (TypeError, ValueError):
+        created = datetime.fromisoformat(order_date)
+    except ValueError:
         return False
     # La API manda la fecha sin offset (hora local), pero si alguna vez viniera
     # con offset hay que normalizarla antes de restar: aware menos naive explota

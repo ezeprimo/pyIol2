@@ -47,14 +47,26 @@ def test_within_window_rechaza_una_orden_vieja(script):
     assert script._within_window("2026-11-21T09:00:00.000", sent_at) is False
 
 
-def test_within_window_normaliza_offset(script):
-    sent_at = datetime.now().replace(microsecond=0)
-    aware = (sent_at + timedelta(hours=3)).astimezone().isoformat()
+def test_within_window_acepta_el_mismo_instante_con_offset(script):
+    # Mismo instante expresado con offset: tiene que normalizarse y aceptarse.
+    sent_at = datetime(2026, 11, 21, 14, 58, 15)
+    aware = sent_at.astimezone().isoformat()
 
-    # No debe lanzar: aware menos naive explotaria sin la normalizacion.
-    resultado = script._within_window(aware, sent_at)
+    assert script._within_window(aware, sent_at) is True
 
-    assert isinstance(resultado, bool)
+
+def test_within_window_rechaza_un_instante_con_offset_fuera_de_ventana(script):
+    sent_at = datetime(2026, 11, 21, 14, 58, 15)
+    aware = (sent_at.astimezone() - timedelta(hours=3)).isoformat()
+
+    assert script._within_window(aware, sent_at) is False
+
+
+def test_within_window_rechaza_tipos_que_no_son_str(script):
+    sent_at = datetime(2026, 11, 21, 14, 58, 15)
+
+    assert script._within_window(sent_at, sent_at) is False
+    assert script._within_window(20261121, sent_at) is False
 
 
 def test_within_window_tolera_fecha_ilegible(script):

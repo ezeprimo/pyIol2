@@ -293,3 +293,10 @@ reconciliation of an ambiguous create. Offsets are now normalised to local naive
 time and every unparseable value returns False. The helper also got its own test
 module (`tests/test_order_roundtrip_script.py`), loading the script by path so
 the window boundary, the offset case and the unparseable inputs are covered.
+
+L30 (follow-ups closed from review-9b629a8ae9f36ed9): the offset test asserted
+only "does not raise" with a different instant, which a broken implementation
+returning False for every aware input would pass; it now asserts the same
+instant with offset is accepted and an out-of-window offset is rejected. The
+`str(order_date)` coercion also widened the accepted domain, so the helper is
+strict again and rejects non-string input, with a test for it. 112 tests.
