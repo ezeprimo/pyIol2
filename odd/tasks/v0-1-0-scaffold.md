@@ -215,3 +215,24 @@ real. Corrections applied in a separate work unit:
 Re-verified against production after the corrections: buy COME accepted
 (196806828), verified as `pending`, cancelled (`cancelled=True`), no live orders;
 the sell is still rejected with the opaque `ORDER_REJECTED` (open, L21).
+
+L23 (evidence, native review verdict on the correction): the targeted validator
+rejected the correction and its evidence was correct on all three points:
+
+- `_open_orders` still caught `IOLAPIError` and returned `[]`; the replacement
+  silently did not apply, so the guarded `_reconcile` call could never receive a
+  lookup failure.
+- the reconciliation still ignored the order side.
+- changing `settlement_term=""` into a local validation error was an
+  out-of-scope, backward-incompatible behaviour change.
+
+Fixed afterwards as ordinary work, not as a review correction: `_open_orders`
+propagates, the reconciliation matches side and term against the pre-run
+baseline of live ids, and empty `settlement_term` passes through as before
+(only `None` falls back to the order default). 104 tests green.
+
+L24 (terminal): lineage `review-2d1cdc67c3790ae8` ended `escalated` /
+`native_stop_required` with `targeted_validator_rejected`; its single bounded
+correction was consumed and failed, so no further correction or continuation is
+offered for that candidate. A fresh review of the new commit would be a new
+transaction and needs a human decision, as does delivery.

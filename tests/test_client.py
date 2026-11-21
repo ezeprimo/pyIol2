@@ -537,11 +537,13 @@ def test_el_default_de_streaming_no_cambia_por_el_de_las_ordenes(client, stub):
     assert stub.last("GET", "/broker/market-data/GGAL/quote")["params"]["term"] == "T0"
 
 
-def test_settlement_term_vacio_es_invalido(client, stub):
-    with pytest.raises(IOLValidationError):
-        client.create_order("GGAL", "buy", quantity=1, settlement_term="")
+def test_settlement_term_vacio_se_envia_tal_cual(client, stub):
+    # Comportamiento base conservado: solo None cae al default.
+    stub.set("POST", "/broker/orders", ORDER_RESULT_PAYLOAD, status=201)
 
-    assert all(not r["path"].endswith("/broker/orders") for r in stub.requests)
+    client.create_order("GGAL", "buy", quantity=1, settlement_term="")
+
+    assert stub.last("POST", "/broker/orders")["body"]["settlement_term"] == ""
 
 
 def test_settlement_term_none_usa_el_default_de_ordenes(client, stub):

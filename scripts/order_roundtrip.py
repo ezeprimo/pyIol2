@@ -149,12 +149,13 @@ def _pick_held(client: IOLClient) -> tuple[str, str]:
 
 
 def _open_orders(client: IOLClient, day: str) -> list[dict[str, Any]]:
-    """Ordenes del dia que todavia pueden ejecutarse."""
-    try:
-        operations = client.get_trading_operations(day, day)
-    except IOLAPIError as exc:
-        _describe("[RECONCILE FALLA]", _error(exc))
-        return []
+    """
+    Ordenes del dia que todavia pueden ejecutarse.
+
+    Propaga `IOLAPIError`: confundir "no pude consultar" con "no hay ordenes"
+    dejaria un alta ambigua sin reconciliar y la corrida terminaria en 0.
+    """
+    operations = client.get_trading_operations(day, day)
     return [
         {
             "order_id": str(operation.order_id),
@@ -163,6 +164,7 @@ def _open_orders(client: IOLClient, day: str) -> list[dict[str, Any]]:
             "qty": operation.order.qty,
             "price": operation.order.price,
             "term": operation.term,
+            "side": "sell" if "venta" in str(operation.type).lower() else "buy",
         }
         for operation in operations
         if str(operation.status).lower() not in CLOSED_STATUSES
@@ -195,6 +197,7 @@ def _reconcile(
     client: IOLClient,
     day: str,
     symbol: str,
+    side: str,
     term: str,
     price: float,
     quantity: float,
@@ -217,6 +220,7 @@ def _reconcile(
         order["order_id"]
         for order in _open_orders(client, day)
         if order["symbol"] == symbol
+        and order["side"] == side
         and order["order_id"] not in baseline
         and (order.get("term") in (None, "", term))
         and abs(float(order["price"]) - float(price)) < TICK / 2
