@@ -103,6 +103,38 @@ class IOLClient:
             self._http.close()
 
     # ------------------------------------------------------------------
+    # Autenticacion
+    # ------------------------------------------------------------------
+
+    def get_access_token(self) -> str:
+        """
+        Devuelve el access token vigente, renovandolo si hace falta.
+
+        Sirve para reutilizar la sesion HTTP en el WebSocket o en otra
+        herramienta. No lo loguees ni lo persistas en texto plano.
+
+        Returns:
+            El JWT para el header Authorization
+        """
+        return self._tokens.get_access_token()
+
+    def test_authentication(self) -> bool:
+        """
+        Verifica que las credenciales funcionan.
+
+        Hace una request autenticada barata. Si preferis el detalle del error,
+        usa `get_access_token()` y captura la excepcion.
+
+        Returns:
+            True si la API acepta la sesion
+        """
+        try:
+            self._get_data("GET", "/broker/assets/types", params={"country": DEFAULT_COUNTRY})
+        except IOLAPIError:
+            return False
+        return True
+
+    # ------------------------------------------------------------------
     # Transporte
     # ------------------------------------------------------------------
 

@@ -294,6 +294,37 @@ Separa el objeto que lee del que escribe: un servicio que solo muestra precios
 no deberia tener en la mano algo capaz de enviar ordenes. Inyecta el adaptador
 para poder testear con `httpx.MockTransport` y un WebSocket falso.
 
+## Lo Que Devuelve la API Real
+
+Verificado contra el servidor de produccion con `scripts/smoke_test.py` (17 de
+18 pasos OK, mercado cerrado). Diferencias con lo que uno esperaria leyendo el
+contrato:
+
+- **`asset_type` va en castellano.** Los ids reales son `acciones`, `cedears`,
+  `etfs`, `opciones`, `bonos`, `letras`, `obligaciones_negociables`, `fondos`,
+  `cauciones`, `cheques`, `indices`, `monedas`. No existe `stocks`: los ids se
+  piden siempre con `get_asset_types()`.
+- **`panel` tambien es un id propio**: por ejemplo `argaccionespanelgeneral`,
+  `argaccionesmerval`, `argcedearstodos`, `argbonostodos`. Salen de
+  `get_asset_panels(asset_type, country)`.
+- **El plazo de la respuesta no siempre coincide con el pedido.** `GGAL` con
+  `term=T0` devuelve `settlement_term: "T1"`: la API normaliza al plazo con el
+  que cotiza el activo. No asserts `response.settlement_term == request.term`.
+- **`/broker/accounts/{country}/portfolio/history` exige whitelisting.** Con una
+  cuenta no habilitada responde `404` con `{"error": "client_not_whitelisted",
+  "clientId": ...}`, un sobre que **no** sigue el formato `{meta, data, error}`
+  y donde `error` es un string. La libreria lo traduce a `IOLNotFoundError` con
+  el texto original; si lo necesitas, pedi la habilitacion a IOL.
+- **El WebSocket confirma la suscripcion con `{"type": "Success"}`.** No esta en
+  el contrato publicado. Llega como `StreamMessage` con `type == "Success"`,
+  `symbol` y `term` vacios y el JSON original en `raw`; ignoralo o usalo para
+  saber que el subscribe fue aceptado.
+- **Con el mercado cerrado**: `depth` devuelve las listas vacias, `repos/quotes`
+  devuelve `[]` para todos los plazos y el stream solo entrega el `Success`.
+  Que las listas vengan vacias no es un error.
+- **`balances` y `positions` funcionan sin whitelisting**; `watchlists`,
+  `activities` y `activities/operations` tambien, incluso fuera de horario.
+
 ## Lectura Adicional
 
 - [`api-reference.md`](./api-reference.md): firma y retorno de cada metodo.

@@ -78,6 +78,12 @@ Cotizaciones de un panel de un tipo de activo.
 - `term` (`str`) — plazo.
 - **Retorna** `list[ScreenerEntry]` (`instrument`, `quotes`, `book`).
 - **Raw** `get_screener_quotes_raw(...)` → `list[dict[str, Any]]`.
+- **Ojo con los ids**: contra la API real `asset_type` vale `acciones`,
+  `cedears`, `etfs`, `opciones`, `bonos`, `letras`, `obligaciones_negociables`,
+  `fondos`, `cauciones`, `cheques`, `indices` o `monedas`, y `panel` es un id
+  como `argaccionespanelgeneral`. No hay `stocks` ni `bluechips`: los ids se
+  piden con `get_asset_types()` y `get_asset_panels()`.
+- **Errores** `IOLAPIError` si el par `asset_type`/`panel` no existe.
 
 ### `get_option_chain(symbol, market=Markets.BCBA)`
 

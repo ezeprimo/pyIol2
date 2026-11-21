@@ -479,3 +479,32 @@ def test_error_de_transporte_se_reporta_como_connection_error(stub):
         client.get_market_quote("GGAL")
 
     assert "No se pudo conectar" in str(error.value)
+
+
+def test_get_access_token_devuelve_el_token_vigente(client, stub):
+    stub.set("GET", "/broker/market-data/GGAL/quote", QUOTE_PAYLOAD)
+
+    token = client.get_access_token()
+    client.get_market_quote("GGAL")
+
+    assert token == "token-1"
+    assert stub.token_calls == 1
+
+
+def test_test_authentication_devuelve_true_con_sesion_valida(client, stub):
+    stub.set("GET", "/broker/assets/types", [{"id": "stocks", "name": "Acciones"}])
+
+    assert client.test_authentication() is True
+
+
+def test_test_authentication_devuelve_false_si_rechazan_la_sesion(stub, make_client):
+    stub.set(
+        "GET",
+        "/broker/assets/types",
+        error_envelope("Token invalido", status=401),
+        status=401,
+        raw=True,
+    )
+    client = make_client()
+
+    assert client.test_authentication() is False

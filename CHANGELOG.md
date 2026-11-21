@@ -7,6 +7,23 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `IOLClient.get_access_token()` para reutilizar la sesion fuera del cliente
+  (por ejemplo en el WebSocket) y `IOLClient.test_authentication()`, que
+  devuelve un booleano igual que la version legacy.
+- `IOLStreamClient.unsubscribe()` y `unsubscribe_all()`: dan de baja activos
+  sin cerrar la conexion, con los tres canales siempre presentes en el frame.
+- `scripts/smoke_test.py`: prueba de humo de solo lectura contra la API real,
+  con verificacion opcional del handshake del WebSocket.
+
+### Fixed
+
+- Los errores de transporte (`httpx.HTTPError`) levantan `IOLConnectionError`,
+  que se exportaba pero nunca se usaba.
+- Las listas de `quotes` y `trades` de una suscripcion eran la misma instancia,
+  asi que dar de baja un canal vaciaba el otro.
+
 ## [0.1.0] - 2026-11-21
 
 Primera version publica de `pyiol2-client`, el cliente de la API v1 de IOL

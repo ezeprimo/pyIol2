@@ -138,3 +138,31 @@ covers it. `StreamActions.UNSUBSCRIBE/UNSUBSCRIBE_ALL` had no public method, so
 own control-frame pump per connection. The tests caught a real aliasing bug:
 `quotes` and `trades` shared the same list instance, so unsubscribing from one
 channel emptied the other.
+
+L18 (evidence, real API): ran `scripts/smoke_test.py --with-stream` against
+production with the maintainer's credentials, read-only, market closed:
+17 of 18 steps OK. Confirmed live: `/health`, OAuth2 login and
+`test_authentication`, quote, depth (empty lists when closed), asset, 12 asset
+types, screener (99 rows), option chain (128 contracts), historical bars,
+repo terms, balances, 32 positions, activities, trading operations, watchlists
+(1 with 26 items) and the WebSocket handshake with `auth_token` + `subscribe`.
+
+Deviations found against the published contract, all now documented in
+`doc/agent-guide.md` under "Lo Que Devuelve la API Real":
+
+- `asset_type` ids are Spanish (`acciones`, `cedears`, ...); there is no
+  `stocks`. `panel` ids look like `argaccionespanelgeneral`.
+- `term=T0` on GGAL returns `settlement_term: "T1"`: the API normalises to the
+  term the asset trades on.
+- `/broker/accounts/{country}/portfolio/history` answers 404
+  `{"error": "client_not_whitelisted", "clientId": ...}` for a non-whitelisted
+  account, with `error` as a plain string instead of the documented object.
+- The WebSocket confirms a subscription with `{"type": "Success"}`, a message
+  type absent from the published contract; it surfaces as a `StreamMessage`
+  with empty `symbol`/`term` and the raw JSON.
+- `repos/quotes` returns `[]` for every term while the market is closed, so the
+  `term_id` mapping between `/repos/terms` and `/repos/quotes` remains
+  unverified and needs a retest during trading hours (open question, L19).
+
+L19 (open): retest `get_repo_quotes()` and the write paths (`/broker/orders`
+estimate, FCI validate) during trading hours before releasing.
