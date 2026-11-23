@@ -7,6 +7,13 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026-11-22
+
+Primera beta publicada en TestPyPI para validar el pipeline de release
+(construccion, `twine check`, Trusted Publishing y smoke install). No se publica
+en PyPI: el workflow detecta el prerelanzamiento y solo apunta al indice de
+pruebas.
+
 ### Added
 
 - `IOLClient.get_access_token()` para reutilizar la sesion fuera del cliente
