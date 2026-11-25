@@ -23,6 +23,7 @@ from .constants import (
     STREAM_MAX_RECONNECT_ATTEMPTS,
     STREAM_MAX_RECONNECT_DELAY_SECONDS,
     STREAM_MAX_SYMBOLS_PER_CONNECTION,
+    STREAM_PROTOCOL_TYPES,
     GrantTypes,
     StreamActions,
     StreamChannels,
@@ -288,6 +289,9 @@ class _MarketDataConnection:
 
     async def _handle(self, payload: dict[str, Any]) -> None:
         """Traduce un mensaje entrante y lo publica en la cola."""
+        if payload.get("type") in STREAM_PROTOCOL_TYPES:
+            logger.debug("Frame de protocolo descartado: %s", payload)
+            return
         if payload.get("type") == StreamMessageTypes.ERROR:
             raise IOLStreamError(
                 str(payload.get("msg", "Error del WebSocket")),
@@ -429,7 +433,10 @@ class IOLStreamClient:
             order_book: Pedir profundidad; admite un solo simbolo por llamada
 
         Yields:
-            StreamMessage con el mensaje recibido
+            StreamMessage con cada dato de mercado. Los frames de protocolo
+            (`Success` al confirmar la suscripcion, `Pong` del heartbeat) se
+            descartan: si la suscripcion no fue aceptada, el iterador levanta
+            `IOLStreamError` en lugar de emitir un mensaje.
 
         Raises:
             IOLValidationError: Si no se pide ningun canal, si no hay simbolos

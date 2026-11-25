@@ -362,9 +362,18 @@ contrato:
   y donde `error` es un string. La libreria lo traduce a `IOLNotFoundError` con
   el texto original; si lo necesitas, pedi la habilitacion a IOL.
 - **El WebSocket confirma la suscripcion con `{"type": "Success"}`.** No esta en
-  el contrato publicado. Llega como `StreamMessage` con `type == "Success"`,
-  `symbol` y `term` vacios y el JSON original en `raw`; ignoralo o usalo para
-  saber que el subscribe fue aceptado.
+  el contrato publicado. La libreria lo descarta junto con `Pong`
+  (`STREAM_PROTOCOL_TYPES`): `subscribe()` solo entrega datos de mercado, y una
+  suscripcion rechazada se manifiesta como `IOLStreamError`, no como mensaje.
+- **Con el mercado abierto el flujo es continuo.** Verificado en rueda: en pocos
+  segundos llegan 9 `Q` y 2 `T` para dos titulos, el `depth` por REST trae 5+5
+  niveles y el canal `order_book` del WebSocket entrega los 10 niveles actualizados
+  (el tamaño del nivel 5 cambia entre mensajes, o sea que es en vivo).
+- **Los mensajes `T` traen acumulados del dia** (`TS` y `TP`), no deltas: para
+  saber cuanto se opero en esa operacion esta `X`.
+- **Cauciones solo tiene libro en horario de mercado.** Con la rueda abierta los
+  81 plazos devuelven ofertas (se verificaron 12 de 12 con 5 ofertas cada uno);
+  cerrada devolvia `[]`. No confundir eso con un mapeo de `term_id` roto.
 - **Con el mercado cerrado**: `depth` devuelve las listas vacias, `repos/quotes`
   devuelve `[]` para todos los plazos y el stream solo entrega el `Success`.
   Que las listas vengan vacias no es un error.

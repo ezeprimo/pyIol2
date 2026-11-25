@@ -19,6 +19,11 @@ Pensado para validar los caminos de escritura sin riesgo de ejecucion:
 Uso:
     uv run python scripts/order_roundtrip.py            # muestra el plan y sale
     uv run python scripts/order_roundtrip.py --yes      # ejecuta de verdad
+
+NO ejecutar con `--yes` mientras el mercado este operando: una orden limit al
+precio que la banda acepta puede ejecutarse. El script lo detecta por la
+frescura de la cotizacion y se niega a mandar nada, salvo
+`--allow-open-market`, que es una decision consciente de aceptar ese riesgo.
 """
 
 import argparse
@@ -52,6 +57,8 @@ BUY_FACTOR = 0.95
 SELL_FACTOR = 1.05
 MARKETABLE_SELL_FACTOR = 1.00
 TICK = 0.01
+# Si la cotizacion se actualizo hace menos que esto, el mercado esta operando.
+FRESH_QUOTE_SECONDS = 15 * 60
 # Tolerancia entre la hora local del request y la `order_date` del feed.
 SENT_WINDOW_SECONDS = 120.0
 # Estados en los que la orden ya no puede ejecutarse.
@@ -95,6 +102,41 @@ def _full_error(exc: IOLAPIError) -> str:
     if exc.payload:
         detail += f" | payload={json.dumps(exc.payload)[:400]}"
     return detail
+
+
+def _quote_age_seconds(client: IOLClient, symbol: str, market: str = MARKET) -> float | None:
+    """
+    Antiguedad de la ultima actualizacion de la cotizacion.
+
+    Es un proxy de mercado abierto: con la rueda operando la API refresca el
+    precio cada pocos segundos; cerrada, queda congelado en el cierre.
+
+    Returns:
+        Segundos desde la ultima actualizacion, o None si no se puede determinar
+    """
+    quote = client.get_market_quote(symbol, market, SettlementTerms.T1)
+    if not quote.last_updated:
+        return None
+    try:
+        updated = datetime.fromisoformat(quote.last_updated)
+    except ValueError:
+        return None
+    if updated.tzinfo is None:
+        return None
+    return (datetime.now().astimezone() - updated).total_seconds()
+
+
+def _market_looks_open(client: IOLClient, symbol: str) -> bool | None:
+    """
+    Indica si el mercado parece estar operando.
+
+    Returns:
+        True/False si se pudo determinar, None si no hay dato suficiente
+    """
+    age = _quote_age_seconds(client, symbol)
+    if age is None:
+        return None
+    return age <= FRESH_QUOTE_SECONDS
 
 
 def _price(client: IOLClient, symbol: str, market: str = MARKET) -> float:
@@ -320,12 +362,43 @@ def _cancel(client: IOLClient, order_id: str, alive: list[str]) -> bool:
     return True
 
 
+def undetermined_guard(open_market: bool | None, allow: bool) -> bool:
+    """
+    Decide si la corrida se aborta por riesgo de ejecucion.
+
+    Sin dato de frescura se asume lo peor: la sonda no puede probar que el
+    mercado esta cerrado, asi que no se manda nada.
+
+    Args:
+        open_market: Resultado del proxy de mercado abierto
+        allow: Si el operador paso `--allow-open-market`
+
+    Returns:
+        True si hay que abortar
+    """
+    if allow:
+        return False
+    if open_market is None:
+        _say("FALLA: no se pudo determinar si el mercado esta operando; usar --allow-open-market")
+        return True
+    if open_market:
+        _say("FALLA: el mercado parece estar operando y las ordenes podrian ejecutarse")
+        _say("       (usar --allow-open-market solo si es una decision consciente)")
+        return True
+    return False
+
+
 def main() -> int:
     """Ejecuta el round-trip y devuelve el codigo de salida."""
     parser = argparse.ArgumentParser(
         description="Round-trip de ordenes (crear, verificar, cancelar)"
     )
     parser.add_argument("--yes", action="store_true", help="ejecutar las ordenes de verdad")
+    parser.add_argument(
+        "--allow-open-market",
+        action="store_true",
+        help="permitir la corrida con el mercado operando (las ordenes pueden ejecutarse)",
+    )
     parser.add_argument(
         "--allow-marketable-sell",
         action="store_true",
@@ -401,6 +474,11 @@ def main() -> int:
             _say("")
             _say("Sin --yes no se manda nada. Repetir con --yes para ejecutar.")
             return 0
+
+        # Con la rueda operando una orden limit puede ejecutarse de verdad.
+        open_market = _market_looks_open(client, BUY_SYMBOL)
+        if open_market is undetermined_guard(open_market, args.allow_open_market):
+            return 2
 
         # Foto de lo que ya esta vivo: la limpieza solo puede tocar lo que
         # aparezca despues de este punto.

@@ -300,3 +300,61 @@ returning False for every aware input would pass; it now asserts the same
 instant with offset is accepted and an out-of-window offset is rejected. The
 `str(order_date)` coercion also widened the accepted domain, so the helper is
 strict again and rejects non-string input, with a test for it. 112 tests.
+
+L31 (evidence, S6 complete): the release pipeline ran for real. `publish.yml`
+dispatched with `target=testpypi` (run 45088549838) and all three real jobs
+passed: Validate version, Release checks (ruff + pytest + build + twine check)
+and Publish to TestPyPI; Publish to PyPI was skipped because the version is a
+prerelease, exactly as designed. Sigstore attestations were generated.
+
+Verified afterwards: `https://test.pypi.org/simple/pyiol2-client/` returns 200
+(it was 404 before the first publish, which is how the pending publisher was
+confirmed), the only release is `0.1.0b1` with the wheel and the sdist, and a
+clean-venv install from TestPyPI (`--extra-index-url` to PyPI for the
+dependencies) imports and works: `pyIol2.__version__`, `Markets`,
+`SettlementTerms`, `build_symbol_id`, lazy token.
+
+Known wart found here: `__version__` and `pyproject.toml` both carry the raw
+`0.1.0-beta.1` while the distribution normalises to `0.1.0b1`, so the module
+string and the metadata disagree. Normalising both would break the prerelease
+detection in `publish.yml`, which matches the dashed spelling, so the fix is to
+normalise the module string only and make the CI comparison tolerant of PEP 440
+normalisation. Left as a follow-up so as not to re-release a different artifact.
+
+L32 (defect, external): the gentle-pi RDD delivery preflight
+(`lib/review-delivery-preflight.ts:45`) bounds the whole preflight with
+`AbortSignal.timeout(10_000)`, and inside that budget it spawns three
+`gentle-ai` calls (`review mode status`, `review status`, `review assess`) plus
+`git rev-parse`. Measured on this machine: the raw CLI takes 0.2s / 0.14s / 1.8s
+(2.2s total), but the Pi adapter path for `assess` measured 7.9-10.9s across four
+calls in this session, so the sequence straddles the 10s bound and delivery was
+denied intermittently with "The bounded preflight was cancelled or timed out".
+`git push --dry-run` was allowed only because a dry run is not classified as a
+delivery, which also means it proves nothing about the gate. Workaround used: the
+maintainer ran `git push` locally. Proposed upstream fix: skip the native
+untracked-inventory lookup when `git status --porcelain --untracked-files=normal`
+is empty, and give the aborted-signal and timeout cases distinct messages.
+
+L33 (evidence, market open): re-ran the probes with the rueda operando.
+WebSocket now shows the real flow: in seconds, `9 Q` + `2 T` for GGAL and YPFD,
+prices matching the REST quote (GGAL 4405, -4.44%), trades carrying cumulative
+day totals plus the per-trade quantity, and the `order_book` channel delivering
+10 levels whose level-5 size changed between messages (so it is live, not a
+snapshot). REST `depth` returned 5+5 levels where it returned empty while closed.
+
+L34 (resolved, was L19/L21): cauciones work with the market open. 81 terms, and
+12 of 12 sampled terms returned 5 offers each with bid/ask rates. The earlier
+`[]` was the closed market, not a broken `term_id` mapping.
+
+L35 (fix, from L33): the `Success` frame arrived as a `StreamMessage` with no
+symbol, forcing every consumer to filter it. `STREAM_PROTOCOL_TYPES` now drops
+`Success` and `Pong` inside the connection, so `subscribe()` only yields market
+data and a rejected subscription still surfaces as `IOLStreamError`. Test added;
+113 tests green.
+
+L36 (safety, from the maintainer's warning): `scripts/order_roundtrip.py` now
+refuses to run when the quote was refreshed within 15 minutes (market likely
+open), and also refuses when freshness cannot be determined, unless
+`--allow-open-market` is passed. Verified read-only: quote age 3s, market open,
+guard aborts without the flag. The script was NOT executed with `--yes` at any
+point while the market was open.

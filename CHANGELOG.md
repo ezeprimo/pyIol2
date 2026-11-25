@@ -29,6 +29,15 @@ pruebas.
 
 ### Changed
 
+- `IOLStreamClient.subscribe()` descarta los frames de protocolo (`Success` al
+  confirmar la suscripcion, `Pong` del heartbeat) en lugar de entregarlos como
+  mensajes sin simbolo ni precio. Una suscripcion rechazada sigue levantando
+  `IOLStreamError`.
+- `scripts/order_roundtrip.py` se niega a correr con el mercado operando (lo
+  detecta por la frescura de la cotizacion) salvo `--allow-open-market`: con la
+  rueda abierta una orden limite al precio de referencia puede ejecutarse.
+- `scripts/stream_probe.py`: sonda de market data en vivo, de solo lectura.
+
 - `estimate_order()` y `create_order()` rechazan `settlement_term=""` con
   `IOLValidationError`: la cadena vacia no es un default, `None` lo es. Antes se
   mandaba y la API respondia 400 sin detalle.

@@ -338,3 +338,21 @@ async def test_unsubscribe_all_limpia_las_suscripciones():
     await agen.aclose()
 
     assert {"action": "unsubscribe_all"} in server.sent
+
+
+async def test_descarta_los_frames_de_protocolo():
+    # Con el mercado abierto el servidor confirma con {"type": "Success"} y
+    # responde al ping con Pong: no son datos y no deben llegar al consumidor.
+    success = json.dumps({"type": "Success", "code": 200, "msg": "Subscribed"})
+    pong = json.dumps({"type": "Pong"})
+    server = FakeServer([success, quote_message(), pong, trade_message()], delay=0.01)
+    stream = make_stream(server)
+
+    agen = stream.subscribe(["GGAL"])
+    first = await asyncio.wait_for(anext(agen), timeout=5)
+    second = await asyncio.wait_for(anext(agen), timeout=5)
+    await agen.aclose()
+
+    assert first.type == "Q"
+    assert second.type == "T"
+    assert all(message.type not in ("Success", "Pong") for message in (first, second))

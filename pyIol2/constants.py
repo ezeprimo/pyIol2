@@ -74,6 +74,12 @@ class StreamMessageTypes:
     ERROR = "Error"  # Error informado por el servidor
 
 
+# Frames de protocolo que no son datos de mercado: confirman la suscripcion
+# (`Success`) o responden al heartbeat (`Pong`). El iterador de `subscribe()` los
+# descarta para no entregar mensajes sin simbolo ni precio.
+STREAM_PROTOCOL_TYPES = ("Success", "Pong")
+
+
 # Acciones que acepta el WebSocket
 class StreamActions:
     """Acciones de control del WebSocket"""
