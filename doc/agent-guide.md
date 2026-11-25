@@ -288,6 +288,29 @@ Verificado con `scripts/safe_write_probe.py` contra produccion, mercado abierto.
 - **El monto minimo manda**: `get_repo_terms()` trae `min_amount` por plazo
   (100.000 ARS en la muestra); estimar por debajo no tiene sentido.
 
+## Streaming Verificado en Serio
+
+Probado con `scripts/stream_stress_probe.py` contra el servidor real, con el
+mercado abierto. Los cuatro escenarios pasaron:
+
+- **Reparto de mas de 50 titulos.** Con 60 simbolos se abren **2 conexiones**
+  (`[50, 10]`) y llegan datos de las dos. El limite de 50 es por canal y por
+  conexion, y el reparto es automatico: no armes el sharding a mano.
+- **`unsubscribe` lo respeta el servidor.** Pedir la baja de YPFD devuelve
+  `['YPFD|BCBA|T0']` y despues llegan solo mensajes de GGAL. El frame que arma
+  la libreria es el que el servidor espera.
+- **`unsubscribe_all` tambien.** Despues de mandarlo no llego ningun mensaje en
+  una ventana de 8 segundos, con la conexion abierta.
+- **La reconexion funciona de verdad.** Cortando la conexion a proposito, el
+  cliente registra `reintento 1/5 en 1.0s`, abre una conexion nueva, se
+  reautentica, **vuelve a suscribirse solo** y siguen llegando mensajes. No hace
+  falta reconstruir nada desde la aplicacion.
+
+Detalle de implementacion util si escribis tu propio wrapper: en `websockets` 17
+`ClientConnection` implementa `__aiter__` como corrutina y **no** expone
+`__anext__`, asi que para envolver una conexion hay que delegar con un generador
+asincrono propio, no con `await ws.__anext__()`.
+
 ## Nunca Reintentar una Escritura Incierta
 
 Estos metodos tienen efectos reales sobre la cuenta:

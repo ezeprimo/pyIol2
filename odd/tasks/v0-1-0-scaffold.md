@@ -379,3 +379,26 @@ residue in the account.
 
 Still unverified and deliberately so (they move money): `create_repo`,
 `cancel_repo`, `subscribe_fund`, `redeem_fund`, `cancel_fund_operation`.
+
+L38 (evidence, block 2): ran `scripts/stream_stress_probe.py` against the live
+server with the market open. Four of four scenarios passed.
+
+1. Sharding: 60 symbols produced 2 connections with `[50, 10]` symbols and data
+   arrived on both, so the 50-per-channel cap and the automatic split hold against
+   the real server.
+2. `unsubscribe`: returns `['YPFD|BCBA|T0']` and only GGAL messages arrive
+   afterwards (8 of them), so the frame the library builds is what the server
+   expects.
+3. `unsubscribe_all`: zero messages in an 8 second window with the socket open.
+4. Reconnection: an injected drop on the first connection produced the library's
+   own `reintento 1/5 en 1.0s`, a fresh connection, re-authentication, automatic
+   re-subscription and 4 more messages.
+
+The one failure along the way was in the probe, not the library: `websockets` 17
+implements `ClientConnection.__aiter__` as a coroutine and exposes no `__anext__`,
+so a wrapper must delegate with its own async generator. Documented in the agent
+guide because anyone writing a custom connect factory will hit it.
+
+With this, the streaming surface is verified end to end against production.
+Still unverified and deliberately so, because they move money: `create_repo`,
+`cancel_repo`, `subscribe_fund`, `redeem_fund`, `cancel_fund_operation`.

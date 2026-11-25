@@ -37,6 +37,9 @@ pruebas.
   detecta por la frescura de la cotizacion) salvo `--allow-open-market`: con la
   rueda abierta una orden limite al precio de referencia puede ejecutarse.
 - `scripts/stream_probe.py`: sonda de market data en vivo, de solo lectura.
+- `scripts/stream_stress_probe.py`: verifica contra el servidor real el reparto de
+  mas de 50 simbolos, `unsubscribe`, `unsubscribe_all` y la reconexion con corte
+  inyectado. Solo lectura.
 - `scripts/safe_write_probe.py`: ejercita el CRUD de watchlists y las dos
   estimaciones (orden y caucion) contra la API real, sin mover dinero. Borra la
   watchlist de prueba en un `finally` y verifica que no quede residuo.
