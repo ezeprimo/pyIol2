@@ -429,3 +429,24 @@ L40 (debt, the two items that were open):
 Still blocked by the environment, not by us: `.env.example` cannot be created
 because the harness safety policy refuses every `.env*` path. The README
 documents the two variables instead.
+
+L41 (evidence, money block as far as it can go without moving money): ran
+`scripts/money_write_probe.py` with the market closed and 3,064.88 ARS available.
+
+- `estimate_repo`: the components carry real names — `fee_type` "Derechos de
+  Mercado" (0.50) and "Comision" (4.93) per term, each with its 21% VAT.
+- `create_repo` with the 100,000 ARS minimum answered **500 INTERNAL_ERROR**, not
+  a friendly 422: no order id came back, so nothing was created. The accepted
+  repo path is unreachable with this balance and needs no decision.
+- `cancel_repo("0")` returns 422 with a body that is not the standard envelope
+  (`{"success":false,"message":"Transaction was not found.",...}`) plus a
+  `Service https://activities.invertironline.com/...` string, so the cancel is
+  proxied to the legacy activity service.
+- FCI: `validate_fund_subscription("IOLCAMA", 1000)` = `valid=True`, and
+  `validate_fund_redemption` without holdings gives `FCI-23` "No se encontró el
+  título para el cliente". v1 has no fund catalogue, so the symbol must come from
+  outside.
+
+Remaining and deliberately not executed: a real FCI subscription (moves money
+into a fund, cancellation window unknown). It is the only money write that is
+actually reachable with this balance, so it needs an explicit decision.

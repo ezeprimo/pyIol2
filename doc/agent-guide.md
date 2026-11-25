@@ -288,6 +288,33 @@ Verificado con `scripts/safe_write_probe.py` contra produccion, mercado abierto.
 - **El monto minimo manda**: `get_repo_terms()` trae `min_amount` por plazo
   (100.000 ARS en la muestra); estimar por debajo no tiene sentido.
 
+## Cauciones y FCI: Lo Que Aceptan
+
+Verificado con `scripts/money_write_probe.py` con el mercado cerrado. Los dos
+caminos se ejercitaron hasta donde se puede sin mover plata.
+
+- **`estimate_repo` devuelve componentes con nombre.** Dos por plazo en la
+  muestra: `fee_type = "Derechos de Mercado"` (0.50) y `fee_type = "Comision"`
+  (4.93). Sumalos para el costo total; el `vat_amount` es el 21% de cada uno.
+- **El minimo de caucion es 100.000 ARS** por plazo (`min_amount`). Con un saldo
+  menor el alta no se puede ni intentar en serio — y ojo con lo que devuelve:
+  **`500 INTERNAL_ERROR` con "Ocurrio un error al procesar la solicitud"**, no un
+  `422` con "saldo insuficiente". No hay validacion amable: si vas a operar
+  cauciones, compará el importe con `get_account_balances()` antes de mandar.
+- **El `cancel_repo` de un id inexistente proxea el servicio legacy.** Devuelve
+  `422` con un cuerpo que **no** es el sobre `{meta, data, error}`:
+  `{"success":false,"message":"Transaction was not found.",...}` y una cadena
+  `Service https://activities.invertironline.com/api/clients/<id>/operations/<n>`.
+  La libreria lo traduce igual a `IOLValidationError`, pero el payload viene de
+  otro host: no lo parsees esperando `meta.trace_id`.
+- **FCI no tiene catalogo en la v1.** No hay endpoint que liste fondos, asi que el
+  simbolo tiene que venir de afuera (la doc de IOL usa `IOLCAMA`).
+  `validate_fund_subscription("IOLCAMA", 1000)` devuelve `valid=True`; es el
+  unico chequeo previo disponible.
+- **`validate_fund_redemption` sin tenencia da `FCI-23`**: "No se encontró el
+  título para el cliente". Es la forma de detectar que no tenes el fondo antes de
+  intentar rescatar.
+
 ## Streaming Verificado en Serio
 
 Probado con `scripts/stream_stress_probe.py` contra el servidor real, con el
