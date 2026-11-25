@@ -185,6 +185,7 @@ con `get_asset_types()` y `get_asset_panels()`, no son alias fijos como
 - [`doc/api-reference.md`](doc/api-reference.md) — referencia de todos los metodos publicos
 - [`doc/recipes/`](doc/recipes) — recetas cortas y ejecutables
 - [`doc/notebooks/`](doc/notebooks) — notebooks paso a paso
+- [`scripts/README.md`](scripts/README.md) — las herramientas de verificacion contra la API real
 - [`doc/vendor/iol-api-v1.md`](doc/vendor/iol-api-v1.md) — contrato de la API congelado tal como lo publica IOL
 - [`llms.txt`](llms.txt) — mapa del repositorio para agentes
 - [`CHANGELOG.md`](CHANGELOG.md) — historial de versiones

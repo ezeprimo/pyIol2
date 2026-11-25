@@ -11,6 +11,8 @@ contract and verify names in the source before generating code.
 - Agent usage, streaming lifecycle and limits: `doc/agent-guide.md`
 - Public method reference: `doc/api-reference.md`
 - Read-only runnable recipes: `doc/recipes/`
+- Verification tools against the real API (which one writes, which one can move
+  money): `scripts/README.md`
 - Interactive notebooks (unexecuted): `doc/notebooks/`
 - Frozen vendor contract for API v1: `doc/vendor/iol-api-v1.md`
 - Package exports: `pyIol2/__init__.py`

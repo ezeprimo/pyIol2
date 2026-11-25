@@ -78,6 +78,7 @@ uv run ruff format --check doc/recipes/
 uv build
 
 # Los helpers de `scripts/` tambien se lintean en el workflow de publicacion
+# (catalogo y reglas de cada uno: scripts/README.md)
 uv run ruff check scripts/
 uv run ruff format --check scripts/
 ```

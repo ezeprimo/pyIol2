@@ -15,6 +15,8 @@ data).
 - **[Recetas](./recipes/)** — scripts cortos y ejecutables, de solo lectura
   salvo la estimacion.
 - **[Notebooks](./notebooks/)** — recorrido paso a paso, commiteado sin ejecutar.
+- **[Herramientas](../scripts/README.md)** — scripts de verificacion contra la API
+  real, con que escribe cada uno y cual puede mover dinero.
 - **[Contrato de la API v1](./vendor/iol-api-v1.md)** — snapshot de la
   documentacion que publica IOL; la fuente de los nombres de campos.
 

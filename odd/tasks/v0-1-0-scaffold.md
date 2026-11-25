@@ -402,3 +402,11 @@ guide because anyone writing a custom connect factory will hit it.
 With this, the streaming surface is verified end to end against production.
 Still unverified and deliberately so, because they move money: `create_repo`,
 `cancel_repo`, `subscribe_fund`, `redeem_fund`, `cancel_fund_operation`.
+
+L39 (docs): added `scripts/README.md` as the catalogue of the verification tools,
+because the scripts had grown to six with very different risk profiles and nothing
+told them apart. Each tool documents its purpose, flags, requirements, expected
+output and gotchas; the summary table carries an explicit "moves money" column so
+the one script that can place a real order cannot be confused with the five that
+cannot. Linked from `README.md`, `doc/README.md`, `llms.txt` and `CONTRIBUTING.md`.
+Core reviewed with L38's findings fixed in it.
