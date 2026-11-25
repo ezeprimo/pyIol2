@@ -358,3 +358,24 @@ open), and also refuses when freshness cannot be determined, unless
 `--allow-open-market` is passed. Verified read-only: quote age 3s, market open,
 guard aborts without the flag. The script was NOT executed with `--yes` at any
 point while the market was open.
+
+L37 (evidence, block 1 of the pending list): ran `scripts/safe_write_probe.py`
+against production with the market open. Three of three groups passed, with no
+residue in the account.
+
+- Watchlists CRUD end to end: created id 247707, renamed, added GGAL, read it back
+  with a live quote (bid 4575, ask 4602.5), removed it, deleted the list. The
+  account went from `[74964]` before to `[74964]` after: the real watchlist with
+  26 items was never touched.
+- `estimate_order`: market buy of 1 GGAL returned `importe=4602.5`, which was the
+  `best_ask` and not the last price, so the estimate is conservative. Commission
+  came out at ~0.5% of the amount (23.01 on 4602.5; 25 on 5000) plus VAT and a
+  separate market fee. A limit estimate at 4556.48 priced the order at the limit.
+- `estimate_repo`: terms carry a real `min_amount` (100,000 ARS), and each term
+  returns **several components, not one total** — two rows in the sample: the
+  period interest and the commission plus its VAT (21% of the commission,
+  `commission_type` = Porcentaje). Documented so nobody sums the list as if it
+  were a single fee.
+
+Still unverified and deliberately so (they move money): `create_repo`,
+`cancel_repo`, `subscribe_fund`, `redeem_fund`, `cancel_fund_operation`.

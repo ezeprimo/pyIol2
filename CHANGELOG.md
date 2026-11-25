@@ -37,6 +37,9 @@ pruebas.
   detecta por la frescura de la cotizacion) salvo `--allow-open-market`: con la
   rueda abierta una orden limite al precio de referencia puede ejecutarse.
 - `scripts/stream_probe.py`: sonda de market data en vivo, de solo lectura.
+- `scripts/safe_write_probe.py`: ejercita el CRUD de watchlists y las dos
+  estimaciones (orden y caucion) contra la API real, sin mover dinero. Borra la
+  watchlist de prueba en un `finally` y verifica que no quede residuo.
 
 - `estimate_order()` y `create_order()` rechazan `settlement_term=""` con
   `IOLValidationError`: la cadena vacia no es un default, `None` lo es. Antes se

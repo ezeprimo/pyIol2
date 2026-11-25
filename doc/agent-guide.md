@@ -266,6 +266,28 @@ Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
   la orden en `get_trading_operations()` con `status: "pending"` en segundos, y
   `cancel_order()` devolviendo `cancelled: True` con `status: "cancelled"`.
 
+## Escrituras Inocuas y Estimaciones
+
+Verificado con `scripts/safe_write_probe.py` contra produccion, mercado abierto.
+
+- **Las watchlists funcionan de punta a punta**: crear, leer, renombrar, agregar
+  un item, leerlo con su cotizacion en vivo, quitarlo y borrar la lista. El item
+  agregado aparece con `last_price`, `best_bid` y `best_ask` reales. Es el unico
+  CRUD de escritura sin riesgo: se puede probar cuando quieras.
+- **`estimate_order` usa la punta vendedora para una compra a mercado.** Con
+  `quantity=1` sobre GGAL devolvio `importe=4602.5`, que era el `best_ask` del
+  momento, no el ultimo precio. O sea: la estimacion es realista y no optimista.
+- **La comision ronda el 0.5% del importe** (4602.5 -> 23.01; 5000 -> 25), mas
+  IVA sobre la comision y un fee de mercado aparte. No hardcodees el porcentaje:
+  sale de la API y puede cambiar por tipo de activo.
+- **`estimate_repo` devuelve varios componentes por plazo**, no un total. En la
+  muestra vinieron dos entradas por plazo: el interes del periodo y la
+  comision+IVA (`vat_amount` = 21% de la comision, `commission_type` =
+  `Porcentaje`, `fee_type` distinto). Si vas a mostrar el costo total, sumala por
+  plazo; no asumas que la lista trae una sola fila.
+- **El monto minimo manda**: `get_repo_terms()` trae `min_amount` por plazo
+  (100.000 ARS en la muestra); estimar por debajo no tiene sentido.
+
 ## Nunca Reintentar una Escritura Incierta
 
 Estos metodos tienen efectos reales sobre la cuenta:
