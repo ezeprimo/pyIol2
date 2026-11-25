@@ -104,6 +104,12 @@ Serie historica OHLCV.
 - `market` (`str`) — mercado.
 - **Retorna** `HistoricalBars` (`symbol`, `market`, `total_bars`, `bars`).
 - **Raw** `get_historical_bars_raw(...)` → `dict[str, Any]`.
+- **Ojo con `bars[].datetime`**: la API lo manda como `str` en dos formatos
+  distintos segun el momento — `"2026-01-01 10:00:00"` sin zona, o
+  `"2026-11-25T15:40:10.000Z"` en ISO 8601 con `Z`. La libreria lo deja tal
+  cual. Para ordenar o filtrar usar `bars[].timestamp` (unix en segundos), que
+  no cambia de formato. `start` y `end` van siempre como
+  `YYYY-MM-DD HH:MM:SS`.
 
 ## Cauciones (repos)
 

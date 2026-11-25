@@ -469,7 +469,19 @@ class OptionQuote:
 
 @dataclass
 class HistoricalBar:
-    """Vela OHLCV historica."""
+    """
+    Vela OHLCV historica.
+
+    Attributes:
+        datetime: Fecha y hora tal como la manda la API. Se observaron dos
+            formatos en produccion: `"2026-01-01 10:00:00"` (sin zona) y
+            `"2026-11-25T15:40:10.000Z"` (ISO 8601 con `Z`). Se guarda como
+            viene; para ordenar o filtrar usar `timestamp`, que es unix en
+            segundos y no cambia de formato.
+        timestamp: Segundos unix de la vela
+        open, high, low, close: Precios de la vela
+        volume: Volumen operado en la vela
+    """
 
     datetime: str = ""
     timestamp: int = 0

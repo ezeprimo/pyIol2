@@ -410,3 +410,22 @@ output and gotchas; the summary table carries an explicit "moves money" column s
 the one script that can place a real order cannot be confused with the five that
 cannot. Linked from `README.md`, `doc/README.md`, `llms.txt` and `CONTRIBUTING.md`.
 Core reviewed with L38's findings fixed in it.
+
+L40 (debt, the two items that were open):
+
+- The offset test was host-dependent: it built the aware timestamp with
+  `sent_at.astimezone()`, so on a UTC host it only covered `+00:00` and an
+  implementation that dropped `tzinfo` instead of normalising it would still have
+  passed. It now uses a fixed non-local offset (UTC-5) and asserts against the
+  correctly converted local time. Verified the test is sensitive: the real helper
+  returns True for that pair while a deliberately buggy version that drops the
+  offset returns False.
+- `bars[].datetime` was documented only in passing. The API returns two shapes
+  for the same field depending on the moment (`"2026-01-01 10:00:00"` without a
+  zone, and `"2026-11-25T15:40:10.000Z"`), so the model docstring, the API
+  reference and the agent guide now say so and point at `bars[].timestamp` (unix
+  seconds) for ordering or filtering.
+
+Still blocked by the environment, not by us: `.env.example` cannot be created
+because the harness safety policy refuses every `.env*` path. The README
+documents the two variables instead.

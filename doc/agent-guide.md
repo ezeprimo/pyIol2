@@ -422,6 +422,10 @@ contrato:
 - **Con el mercado cerrado**: `depth` devuelve las listas vacias, `repos/quotes`
   devuelve `[]` para todos los plazos y el stream solo entrega el `Success`.
   Que las listas vengan vacias no es un error.
+- **`bars[].datetime` no tiene un formato estable**: en la misma cuenta llego
+  como `"2026-01-01 10:00:00"` (sin zona) y como
+  `"2026-11-25T15:40:10.000Z"` (ISO con `Z`). Si parseas historicos, contempla
+  los dos o usa `bars[].timestamp`, que es unix y no cambia.
 - **`balances` y `positions` funcionan sin whitelisting**; `watchlists`,
   `activities` y `activities/operations` tambien, incluso fuera de horario.
 
