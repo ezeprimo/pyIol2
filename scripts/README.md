@@ -18,6 +18,7 @@ accidente.
 | [`stream_probe.py`](#stream_probepy) | Vistazo del market data en vivo | no | no | Después de tocar `stream.py` |
 | [`stream_stress_probe.py`](#stream_stress_probepy) | Sharding, bajas y reconexión | no | no | Después de tocar `stream.py`, en horario de mercado |
 | [`safe_write_probe.py`](#safe_write_probepy) | CRUD de watchlists + estimaciones | sí (solo su propia watchlist) | no | Después de tocar cualquier método de escritura |
+| [`money_write_probe.py`](#money_write_probepy) | Caución y FCI hasta donde no se mueve plata | sí | **no, por diseño** | Con el mercado cerrado, tras tocar cauciones o FCI |
 | [`order_roundtrip.py`](#order_roundtrippy) | Crea y cancela una compra y una venta | **sí** | **sí** | Solo con el mercado cerrado, y con `--yes` explícito |
 
 ## Requisitos comunes
@@ -186,6 +187,36 @@ No mueve dinero. La escritura más riesgosa que hace es una watchlist, que se
 borra en un `finally`.
 
 ---
+
+## `money_write_probe.py`
+
+Los dos caminos de escritura que faltaban —cauciones y FCI— ejercitados hasta el
+borde del dinero. Está diseñado para **no mover plata**.
+
+```bash
+uv run python scripts/money_write_probe.py          # solo lectura
+uv run python scripts/money_write_probe.py --yes    # agrega el alta de caución y el cancel de prueba
+```
+
+| Flag | Para qué |
+|---|---|
+| `--yes` | Intenta el alta de caución (rechazo esperado por saldo) y el cancel de un id inexistente |
+| `--allow-fci-write` | Ejecuta una suscripción real de FCI. **No se pasa por default y no está recomendado** |
+
+Cómo se evita mover plata:
+
+- **Cauciones**: el mínimo es 100.000 ARS por plazo; si el saldo disponible es
+  menor, el alta no puede concretarse. Si a pesar de todo el broker la acepta, se
+  cancela en un `finally`. Lo que devuelve hoy es `500 INTERNAL_ERROR`, no un
+  rechazo amable — dato documentado en el agent guide.
+- **FCI**: solo se llaman los endpoints `validate_*`, que son de lectura. Una
+  suscripción real mete plata en un fondo y la cancelación depende de la ventana
+  del día, así que queda detrás de un flag propio.
+
+Qué verifica: los dos componentes de `estimate_repo` con su `fee_type`, que el
+alta de caución devuelve un error en vez de crear algo, que el cancel de un id
+inexistente no rompe nada, y que las validaciones de FCI distinguen un fondo que
+podés suscribir de uno que no tenés.
 
 ## `order_roundtrip.py`
 
