@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from pyIol2 import IOLAPIError, IOLClient
 
 FUND_SYMBOL = "IOLCAMA"
-FUND_AMOUNT = 1000.0
+FUND_AMOUNT = 100.0
 
 
 def _say(text: str) -> None:
@@ -122,12 +122,26 @@ def _repos(client: IOLClient, yes: bool) -> bool:
     return ok
 
 
-def _fci(client: IOLClient, allow_write: bool) -> bool:
-    """Valida operaciones de FCI (lectura) y, solo con permiso, suscribe."""
-    _say("== FCI ==")
+def _fci_positions(client: IOLClient) -> list[str]:
+    """Simbolos de FCI presentes en la cartera, si la API los expone."""
     try:
-        validacion = client.validate_fund_subscription(FUND_SYMBOL, FUND_AMOUNT)
-        _say(f"  validate suscripcion {FUND_SYMBOL} {FUND_AMOUNT}: valid={validacion.valid}")
+        portfolio = client.get_positions("AR")
+    except IOLAPIError:
+        return []
+    return [
+        position.instrument.symbol
+        for position in portfolio.positions
+        if "fondo" in position.instrument.type.lower() or "fci" in position.instrument.type.lower()
+    ]
+
+
+def _fci(client: IOLClient, allow_write: bool, amount: float) -> bool:
+    """Valida operaciones de FCI (lectura) y, solo con permiso, suscribe."""
+    _say(f"== FCI ({amount:g} ARS) ==")
+    _say(f"  fondos en cartera antes: {_fci_positions(client) or 'ninguno'}")
+    try:
+        validacion = client.validate_fund_subscription(FUND_SYMBOL, amount)
+        _say(f"  validate suscripcion {FUND_SYMBOL} {amount:g}: valid={validacion.valid}")
         for message in validacion.messages:
             _say(f"    mensaje {message.code}: {message.message}")
     except IOLAPIError as exc:
@@ -146,26 +160,38 @@ def _fci(client: IOLClient, allow_write: bool) -> bool:
         _say("  (se habilitan con --allow-fci-write, solo con un simbolo verificado)")
         return True
 
-    _say("  ADVERTENCIA: ejecutando suscripcion real")
+    _say(f"  ADVERTENCIA: ejecutando suscripcion real por {amount:g} ARS")
     transaccion = None
+    ok = True
     try:
-        resultado = client.subscribe_fund(FUND_SYMBOL, FUND_AMOUNT)
+        resultado = client.subscribe_fund(FUND_SYMBOL, amount)
         transaccion = resultado.transaction_id
-        _say(f"  subscribe -> ok={resultado.successful} transaccion={transaccion}")
+        _say(
+            f"  subscribe -> ok={resultado.successful} transaccion={transaccion} "
+            f"mensajes={[(m.code, m.message) for m in resultado.messages]}"
+        )
+        if not resultado.successful:
+            ok = False
     except IOLAPIError as exc:
         _say(f"  subscribe -> rechazada: {_error(exc)}")
         return True
     finally:
         if transaccion:
+            # Cancelar primero: dejar una suscripcion viva es dejar plata en el fondo.
             try:
                 cancelada = client.cancel_fund_operation(transaccion)
                 _say(
                     f"  cancel -> id={cancelada.transaction_id} "
                     f"cancelled={cancelada.cancelled} status={cancelada.status}"
                 )
+                ok = ok and cancelada.cancelled
             except IOLAPIError as exc:
                 _say(f"  CANCEL FALLO (revisar a mano transaccion={transaccion}): {_error(exc)}")
-    return True
+                ok = False
+
+    _say(f"  fondos en cartera despues: {_fci_positions(client) or 'ninguno'}")
+    _say(f"  saldo ARS despues: {client.get_account_balances('AR').ars.available.t0}")
+    return ok
 
 
 def main() -> int:
@@ -177,6 +203,12 @@ def main() -> int:
         "--yes",
         action="store_true",
         help="intentar el alta de caucion (rechazo esperado por saldo) y el cancel de un id inexistente",
+    )
+    parser.add_argument(
+        "--fci-amount",
+        type=float,
+        default=FUND_AMOUNT,
+        help=f"monto de la suscripcion de FCI (default {FUND_AMOUNT:g} ARS)",
     )
     parser.add_argument(
         "--allow-fci-write",
@@ -195,7 +227,7 @@ def main() -> int:
     resultados: list[tuple[str, bool]] = []
     with IOLClient(username, password) as client:
         resultados.append(("cauciones", _repos(client, args.yes)))
-        resultados.append(("FCI", _fci(client, args.allow_fci_write)))
+        resultados.append(("FCI", _fci(client, args.allow_fci_write, args.fci_amount)))
 
     _say("")
     fallidos = [nombre for nombre, ok in resultados if not ok]

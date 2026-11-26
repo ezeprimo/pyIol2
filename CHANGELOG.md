@@ -38,7 +38,9 @@ pruebas.
   rueda abierta una orden limite al precio de referencia puede ejecutarse.
 - `scripts/stream_probe.py`: sonda de market data en vivo, de solo lectura.
 - `scripts/money_write_probe.py`: ejercita cauciones y FCI hasta donde no se mueve
-  plata (estimación, alta sin saldo, cancel de prueba y validaciones de FCI).
+  plata (estimación, alta sin saldo, cancel de prueba y validaciones de FCI). Con
+  `--allow-fci-write --fci-amount` suscribe y cancela de verdad, verificando que
+  el saldo quede idéntico.
 - `scripts/stream_stress_probe.py`: verifica contra el servidor real el reparto de
   mas de 50 simbolos, `unsubscribe`, `unsubscribe_all` y la reconexion con corte
   inyectado. Solo lectura.

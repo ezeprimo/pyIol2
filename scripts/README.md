@@ -201,7 +201,8 @@ uv run python scripts/money_write_probe.py --yes    # agrega el alta de caución
 | Flag | Para qué |
 |---|---|
 | `--yes` | Intenta el alta de caución (rechazo esperado por saldo) y el cancel de un id inexistente |
-| `--allow-fci-write` | Ejecuta una suscripción real de FCI. **No se pasa por default y no está recomendado** |
+| `--fci-amount` | Monto de la suscripción de FCI (default 100 ARS) |
+| `--allow-fci-write` | Ejecuta una suscripción real de FCI y la cancela. **No se pasa por default** |
 
 Cómo se evita mover plata:
 
@@ -209,9 +210,12 @@ Cómo se evita mover plata:
   menor, el alta no puede concretarse. Si a pesar de todo el broker la acepta, se
   cancela en un `finally`. Lo que devuelve hoy es `500 INTERNAL_ERROR`, no un
   rechazo amable — dato documentado en el agent guide.
-- **FCI**: solo se llaman los endpoints `validate_*`, que son de lectura. Una
-  suscripción real mete plata en un fondo y la cancelación depende de la ventana
-  del día, así que queda detrás de un flag propio.
+- **FCI**: por defecto solo se llaman los endpoints `validate_*`, que son de
+  lectura. Con `--allow-fci-write` se suscribe de verdad y se cancela en un
+  `finally`. Verificado con 100 ARS en `IOLCAMA`: `successful=True`,
+  `cancelled=True`, y el saldo quedó idéntico — se comprueba leyendo el saldo
+  antes y después, y que no aparezca ningún movimiento en las actividades del día.
+  Nunca escala el monto solo: si el alta se rechaza, informa y para.
 
 Qué verifica: los dos componentes de `estimate_repo` con su `fee_type`, que el
 alta de caución devuelve un error en vez de crear algo, que el cancel de un id

@@ -450,3 +450,24 @@ L41 (evidence, money block as far as it can go without moving money): ran
 Remaining and deliberately not executed: a real FCI subscription (moves money
 into a fund, cancellation window unknown). It is the only money write that is
 actually reachable with this balance, so it needs an explicit decision.
+
+L42 (evidence, the money block closed): with explicit maintainer approval, ran the
+FCI write path for real with the smallest sensible amount, 100 ARS, on `IOLCAMA`.
+
+Result: `subscribe_fund` returned `successful=True` with `transaction_id`
+197096019, and `cancel_fund_operation` on that id returned `cancelled=True` /
+`status=cancelled`. No residue, confirmed three independent ways:
+
+- `get_account_balances("AR").ars.available.t0` was 3,064.88 before and after.
+- `get_account_activities(today, today)` returned **zero** movements, so no debit
+  ever landed.
+- `get_trading_operations(today, today)` shows the operation as `Suscripción FCI`
+  with `status=cancelled` and `qty=0`.
+
+Also learned: `validate_fund_subscription` does not enforce a minimum — 50, 100,
+200, 300, 500 and 1000 ARS all validate — so it cannot be used to discover the
+fund's floor. The script raises the amount only when the operator passes
+`--fci-amount`: it never escalates on its own.
+
+The only money write that remains unreachable in this account is an *accepted*
+caución, because the minimum is 100,000 ARS against a 3,064.88 balance.

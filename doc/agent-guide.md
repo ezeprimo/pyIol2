@@ -314,6 +314,17 @@ caminos se ejercitaron hasta donde se puede sin mover plata.
 - **`validate_fund_redemption` sin tenencia da `FCI-23`**: "No se encontró el
   título para el cliente". Es la forma de detectar que no tenes el fondo antes de
   intentar rescatar.
+- **La suscripcion y su cancelacion funcionan de punta a punta.** Verificado con
+  100 ARS en `IOLCAMA`: `subscribe_fund` devolvio `successful=True` con
+  `transaction_id`, y `cancel_fund_operation` sobre ese id devolvio
+  `cancelled=True` / `status=cancelled`. Sin residuo, comprobado de tres formas:
+  el saldo ARS quedo **identico** (3.064,88 antes y despues), no aparecio ningun
+  movimiento en `get_account_activities()`, y en `get_trading_operations()` la
+  operacion figura como `Suscripción FCI` con `status=cancelled` y `qty=0`.
+- **`validate_fund_subscription` no valida montos chicos**: acepta desde 50 ARS
+  (probado 50, 100, 200, 300, 500 y 1000, todos `valid=True`). No sirve para
+  descubrir el minimo real del fondo; el rechazo, si existe, llega recien en el
+  alta.
 
 ## Streaming Verificado en Serio
 
