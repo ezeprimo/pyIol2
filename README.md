@@ -1,8 +1,26 @@
 # pyIol2
 
+[![CI](https://github.com/ezeprimo/pyIol2/actions/workflows/ci.yml/badge.svg)](https://github.com/ezeprimo/pyIol2/actions/workflows/ci.yml)
+[![Security](https://github.com/ezeprimo/pyIol2/actions/workflows/security.yml/badge.svg)](https://github.com/ezeprimo/pyIol2/actions/workflows/security.yml)
+[![PyPI](https://img.shields.io/pypi/v/pyiol2-client)](https://pypi.org/project/pyiol2-client/)
+[![Python](https://img.shields.io/pypi/pyversions/pyiol2-client)](https://pypi.org/project/pyiol2-client/)
+[![License](https://img.shields.io/pypi/l/pyiol2-client)](LICENCE)
+[![Downloads](https://img.shields.io/pypi/dm/pyiol2-client)](https://pypi.org/project/pyiol2-client/)
+
 Cliente Python no oficial para la **API de IOL Inversiones**: la plataforma nueva
 (`api.iolinversiones.com`), con REST tipado y streaming de market data por
 WebSocket.
+
+> **Aviso.** Proyecto no oficial: no esta afiliado, avalado ni soportado por IOL
+> Inversiones. Usa la API publica de IOL con tus propias credenciales y bajo sus
+> terminos de servicio. Los metodos de escritura (ordenes, cauciones, FCI) **mueven
+> dinero real** y pueden ejecutar una operacion: nada de esto es asesoramiento
+> financiero y operar puede hacerte perder plata. Probala contra el ambiente de
+> pruebas o con montos minimos antes de usarla en serio.
+>
+> Verificado contra produccion: el cliente y los modelos se probaron contra la API
+> real, y cada verificacion quedo documentada en
+> [`doc/agent-guide.md`](doc/agent-guide.md) con el script que la produjo.
 
 | Campo | Valor |
 |-------|-------|
@@ -18,6 +36,18 @@ WebSocket.
 > compatibles entre si: la v1 usa otro host, otro esquema de autenticacion y otro
 > formato de simbolo (`GGAL|BCBA|T0`). Por eso son dos paquetes distintos y no
 > dos versiones del mismo.
+
+## Indice
+
+- [Que incluye](#que-incluye)
+- [Instalacion](#instalacion)
+- [Configuracion](#configuracion)
+- [Uso basico](#uso-basico)
+- [Streaming en tiempo real](#streaming-en-tiempo-real)
+- [Migracion desde py_iol](#migracion-desde-py_iol)
+- [Documentacion](#documentacion)
+- [Estado](#estado)
+- [Licencia](#licencia)
 
 ## Que incluye
 
