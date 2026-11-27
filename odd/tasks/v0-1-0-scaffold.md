@@ -471,3 +471,15 @@ fund's floor. The script raises the amount only when the operator passes
 
 The only money write that remains unreachable in this account is an *accepted*
 caución, because the minimum is 100,000 ARS against a 3,064.88 balance.
+
+L43 (release prep, S6): promoted to stable `0.1.0`. The `__version__` wart
+disappears by construction — `0.1.0` needs no PEP 440 normalisation, so the
+module string, the `pyproject.toml` version and the built artifact all read
+`0.1.0` (asserted in the preflight, not assumed).
+
+Preflight before tagging: ruff clean, 114 tests, `uv build` produced the wheel and
+the sdist, `twine check` PASSED on both, and the wheel installed in a throwaway
+venv reports metadata and module version equal to `0.1.0`.
+
+`CHANGELOG.md` gets a `[0.1.0]` section with the delta since the beta, and the
+beta section stays as history.

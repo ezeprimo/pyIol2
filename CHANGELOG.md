@@ -7,6 +7,51 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-26
+
+Primera version estable, publicada en TestPyPI y en PyPI. Es la beta con las
+verificaciones contra la API real ya cerradas y las correcciones que salieron de
+ellas. La API v1 de IOL sigue siendo nueva: hasta que se estabilice, los cambios
+incompatibles llegan en versiones `0.MINOR.0`.
+
+### Added
+
+- `IOLClient.get_access_token()` para reutilizar la sesion fuera del cliente
+  (por ejemplo en el WebSocket) y `IOLClient.test_authentication()`, que
+  devuelve un booleano igual que la version legacy.
+- `IOLStreamClient.unsubscribe()` y `unsubscribe_all()`: dan de baja activos
+  sin cerrar la conexion, con los tres canales siempre presentes en el frame.
+- `STREAM_PROTOCOL_TYPES`: los frames `Success` y `Pong` se descartan para que
+  `subscribe()` entregue solo datos de mercado.
+- `scripts/money_write_probe.py`: cauciones y FCI hasta el borde del dinero, con
+  la suscripcion de FCI y su cancelacion detras de un flag explicito.
+- `scripts/stream_stress_probe.py`: sharding, bajas y reconexion contra el
+  servidor real.
+- `scripts/safe_write_probe.py`: CRUD de watchlists y estimaciones sin riesgo.
+- `scripts/stream_probe.py` y `scripts/README.md`: sonda de market data en vivo y
+  catalogo de herramientas con su perfil de riesgo.
+
+### Changed
+
+- `estimate_order()` y `create_order()` mandan siempre `settlement_term`: la API
+  responde 400 si falta, aunque el contrato lo marque opcional. El default de las
+  ordenes es `DEFAULT_ORDER_SETTLEMENT_TERM` (`T1`); el de market data y
+  streaming sigue en `DEFAULT_SETTLEMENT_TERM` (`T0`).
+- `settlement_term=""` levanta `IOLValidationError`: la cadena vacia no es un
+  default, `None` lo es.
+
+### Fixed
+
+- Los errores de transporte levantan `IOLConnectionError`, que se exportaba pero
+  nunca se usaba.
+- Las listas de `quotes` y `trades` de una suscripcion eran la misma instancia,
+  asi que dar de baja un canal vaciaba el otro.
+- La venta del round-trip volvio a ser pasiva por defecto y la variante
+  ejecutable quedo detras de `--allow-marketable-sell`; la verificacion se hace
+  despues de cancelar, para no dejar una orden viva mientras se consulta el feed.
+- La reconciliacion de un alta ambigua ya no se traga los errores de consulta y
+  compara lado, plazo y `order_date` dentro de una ventana.
+
 ## [0.1.0-beta.1] - 2026-11-22
 
 Primera beta publicada en TestPyPI para validar el pipeline de release
