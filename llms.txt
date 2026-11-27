@@ -14,7 +14,10 @@ contract and verify names in the source before generating code.
 - Verification tools against the real API (which one writes, which one can move
   money): `scripts/README.md`
 - Interactive notebooks (unexecuted): `doc/notebooks/`
-- Frozen vendor contract for API v1: `doc/vendor/iol-api-v1.md`
+- Maintenance runbook (IOL changed the API: refresh, map, verify):
+  `doc/maintenance-guide.md`
+- Frozen vendor docs from IOL (REST contract and WebSocket guide), with provenance
+  and refresh commands: `doc/vendor/README.md`
 - Package exports: `pyIol2/__init__.py`
 - Sync REST client: `pyIol2/client.py`
 - Async streaming client: `pyIol2/stream.py`

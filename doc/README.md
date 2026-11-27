@@ -15,6 +15,9 @@ data).
 - **[Recetas](./recipes/)** — scripts cortos y ejecutables, de solo lectura
   salvo la estimacion.
 - **[Notebooks](./notebooks/)** — recorrido paso a paso, commiteado sin ejecutar.
+- **[Guia de mantenimiento](./maintenance-guide.md)** — que hacer cuando IOL cambia
+  la API: refrescar los snapshots vendorizados, mapear el cambio al codigo y
+  verificar. Es el runbook para quien mantiene el repo, humano o agente.
 - **[Herramientas](../scripts/README.md)** — scripts de verificacion contra la API
   real, con que escribe cada uno y cual puede mover dinero.
 - **[Contrato de la API v1](./vendor/iol-api-v1.md)** — snapshot de la
