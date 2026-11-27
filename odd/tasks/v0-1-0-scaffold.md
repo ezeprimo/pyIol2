@@ -483,3 +483,24 @@ venv reports metadata and module version equal to `0.1.0`.
 
 `CHANGELOG.md` gets a `[0.1.0]` section with the delta since the beta, and the
 beta section stays as history.
+
+L44 (release, S6 complete, project closed for v0.1.0): `publish.yml` ran on the
+`v0.1.0` tag (run 45919854395) and **all four jobs passed**: Validate version,
+Release checks, Publish to TestPyPI and Publish to PyPI — the production job ran
+this time because the version is not a prerelease. Both indexes generated Sigstore
+attestations.
+
+Verified from outside the run, not from its log:
+
+- `https://pypi.org/simple/pyiol2-client/` and the TestPyPI equivalent both
+  answer 200.
+- The PyPI JSON API lists exactly one release, `0.1.0`, with the wheel (35,336
+  bytes) and the sdist (259,577 bytes).
+- A clean venv installing `pyiol2-client==0.1.0` straight from production PyPI
+  reports metadata `0.1.0` and module `0.1.0` (they agree, which was the point of
+  releasing a stable version), imports the public surface, builds `GGAL|BCBA|T0`
+  and resolves all three runtime dependencies.
+
+Outstanding, not blocking: the workflows still warn that several actions target
+the deprecated Node 20 runtime (`checkout@v4`, `setup-uv@v5`,
+`upload/download-artifact@v4`). Worth bumping together with enabling Renovate.
