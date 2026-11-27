@@ -184,7 +184,7 @@ prices assets.
 Findings that remain open: sell orders were rejected with an opaque
 `422 ORDER_REJECTED` for a held CEDEAR (JNJ), a held local instrument (PAMP) and
 a non-held symbol (KO), and `details` was empty in every case. Market orders are
-rejected outside trading hours, and a PAMP buy at 4316 with 3064 ARS available
+rejected outside trading hours, and a buy whose amount exceeded the available balance
 was rejected with the same code, so available balance has to be checked before
 sending a real order. The accepted-sell path is still unverified (L21).
 
@@ -249,7 +249,7 @@ Corrections that followed: `scripts/order_roundtrip.py` sells at the reference
 price and refuses to run when the cushion is not real on the buy side;
 `_find_order` retries with a bounded wait because the operations feed lags a few
 seconds behind order creation. Full round-trip verified against production:
-buy COME (196807038) and sell KO (196807039) both `pending`, both
+buy COME (<order_id>) and sell KO (<order_id>) both `pending`, both
 `cancelled=True`, no live orders, exit 0.
 
 L26 (fix, correction of review-19cff5531a4b60a3): the reviewers caught two real
@@ -270,8 +270,8 @@ defects and one broken promise of mine.
   operations feed is polled, and it fails the run when an order is missing or
   left open. `_reconcile` tolerates market orders without a price.
 
-Re-verified against production with the opt-in flag: buy COME (196807075) and
-sell KO (196807076) created, cancelled, and both verified as `cancelled`
+Re-verified against production with the opt-in flag: buy COME (<order_id>) and
+sell KO (<order_id>) created, cancelled, and both verified as `cancelled`
 afterwards; exit 0 and no live orders.
 
 L27 (decision, from the maintainer's follow-ups): `settlement_term=""` is now an
@@ -365,7 +365,7 @@ residue in the account.
 
 - Watchlists CRUD end to end: created id 247707, renamed, added GGAL, read it back
   with a live quote (bid 4575, ask 4602.5), removed it, deleted the list. The
-  account went from `[74964]` before to `[74964]` after: the real watchlist with
+  account kept exactly its existing watchlist before and after: the real one with
   26 items was never touched.
 - `estimate_order`: market buy of 1 GGAL returned `importe=4602.5`, which was the
   `best_ask` and not the last price, so the estimate is conservative. Commission
@@ -455,10 +455,10 @@ L42 (evidence, the money block closed): with explicit maintainer approval, ran t
 FCI write path for real with the smallest sensible amount, 100 ARS, on `IOLCAMA`.
 
 Result: `subscribe_fund` returned `successful=True` with `transaction_id`
-197096019, and `cancel_fund_operation` on that id returned `cancelled=True` /
+<transaction_id>, and `cancel_fund_operation` on that id returned `cancelled=True` /
 `status=cancelled`. No residue, confirmed three independent ways:
 
-- `get_account_balances("AR").ars.available.t0` was 3,064.88 before and after.
+- `get_account_balances("AR").ars.available.t0` was identical before and after.
 - `get_account_activities(today, today)` returned **zero** movements, so no debit
   ever landed.
 - `get_trading_operations(today, today)` shows the operation as `Suscripción FCI`
@@ -470,7 +470,7 @@ fund's floor. The script raises the amount only when the operator passes
 `--fci-amount`: it never escalates on its own.
 
 The only money write that remains unreachable in this account is an *accepted*
-caución, because the minimum is 100,000 ARS against a 3,064.88 balance.
+caución, because the minimum is 100,000 ARS against a much smaller available balance.
 
 L43 (release prep, S6): promoted to stable `0.1.0`. The `__version__` wart
 disappears by construction — `0.1.0` needs no PEP 440 normalisation, so the

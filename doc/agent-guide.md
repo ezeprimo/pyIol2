@@ -237,7 +237,7 @@ Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
   siempre "The order was not accepted". Lo unico util para reclamar es el
   `trace_id`, que la excepcion conserva.
 - **Las ordenes `market` se rechazan fuera de horario.** Usar `limit`.
-- **No alcanza con tener saldo**: una compra de PAMP a 4316 con 3064 de saldo
+- **No alcanza con tener saldo**: una compra cuyo importe superaba el saldo
   disponible fue rechazada con el mismo codigo opaco. Antes de mandar una orden
   real, comparar el importe estimado con `get_account_balances()`.
 - **La banda de precio no es simetrica.** Medido con KO (CEDEAR, ultimo
@@ -246,8 +246,9 @@ Verificado con `scripts/order_roundtrip.py` contra produccion, mercado cerrado.
   `0.95x` abajo. Si tu limite cae fuera de esa banda, no hay forma de saberlo
   antes: el rechazo es el mismo `ORDER_REJECTED` sin detalle.
 - **Las ventas si funcionan.** El problema anterior era el precio, no la
-  tenencia: con `1.00x` del ultimo, una venta de KO (24 disponibles) y de PAMP
-  se aceptan, quedan `pending` y se cancelan igual que las compras. La orden
+  tenencia: con `1.00x` del ultimo, una venta de un CEDEAR con tenencia y de una
+  accion local con tenencia se aceptan, quedan `pending` y se cancelan igual que
+  las compras. La orden
   `market` de venta tambien se acepto.
 - **`settlement_term=""` es un error local.** Un term vacio no significa "usar
   el default": `None` es el default, y la cadena vacia levanta
@@ -318,7 +319,7 @@ caminos se ejercitaron hasta donde se puede sin mover plata.
   100 ARS en `IOLCAMA`: `subscribe_fund` devolvio `successful=True` con
   `transaction_id`, y `cancel_fund_operation` sobre ese id devolvio
   `cancelled=True` / `status=cancelled`. Sin residuo, comprobado de tres formas:
-  el saldo ARS quedo **identico** (3.064,88 antes y despues), no aparecio ningun
+  el saldo ARS quedo **identico** antes y despues, no aparecio ningun
   movimiento en `get_account_activities()`, y en `get_trading_operations()` la
   operacion figura como `Suscripción FCI` con `status=cancelled` y `qty=0`.
 - **`validate_fund_subscription` no valida montos chicos**: acepta desde 50 ARS
